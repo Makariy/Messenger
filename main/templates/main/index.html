@@ -1,0 +1,82 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Messanger</title>
+	<link rel="stylesheet" type="text/css" href="{% static 'main/main.css' %}">
+</head>
+<body>
+	<div class="exit">
+		<a class="exit__button" href="{% url 'chats_handler' %}?action=exit">
+			Exit account
+		</a>
+		<a class="exit__chat-button" href="{% url 'chats_handler' %}?action=exit_chat">
+			Exit chat
+		</a>
+	</div>
+	<section class="messanger">
+		<div class="container">
+			<div class="message-window">
+				<div class="messages">
+					{% for message in messages %}
+					<div class="message" id="{{ message.pk }}">
+						<h4 class="message__author">{{ message.author.name }}</h4>
+						<p class="message__inner">{{ message.message }}</p>
+					</div>
+					{% endfor %}
+				</div>
+				<div class="sender">
+					<div class="sender__form">
+						<input type="text" id="sender__message" placeholder="Enter some message...">
+						<button onclick="send()" class="sender__send">
+							<img src="{% static 'main/send button.svg' %}">
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+</body>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
+	<script>
+
+
+		function getLastMessage() {
+			var messages = document.getElementsByClassName("message");
+			if (messages)
+				return messages[messages.length-1];
+			return null;
+		}
+
+		async function getNewMessages() {
+			var last = getLastMessage();
+			var last_id = '-1';
+			if (last)
+				last_id = last.id;
+
+			await $.get("/request", {'message_id': last_id}).done(
+				function(data) {
+					if (data){
+						document.getElementsByClassName('messages')[0].innerHTML += data;
+					}
+				}
+			);
+		}
+
+		function scrollToLastMessage() {
+			var last = getLastMessage();
+			if (last)
+				last.scrollIntoView();
+		}
+
+		async function send() {
+			var message = document.getElementById("sender__message").value;
+			await $.post("/request", {'message': message});
+		}
+
+		document.onload = scrollToLastMessage;
+		window.setInterval(getNewMessages, 300);
+	</script>
+</html>

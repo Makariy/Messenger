@@ -1,0 +1,115 @@
+
+body {
+	margin: 0;
+}
+
+a {
+    text-decoration: none;
+    outline: none;
+    color: black;
+}
+
+.messanger {
+	height: 80vh;
+	display: flex;
+	align-items: center;	
+}
+
+.container {
+	width: 80%;
+	height: 80%;
+	margin: 0 auto;
+}
+
+.message-window {
+	display: flex;
+	flex-direction: column;
+	border: 3px solid #004DFF;
+	border-radius: 30px;
+	height: 100%;
+	padding: 3% 5%;
+}
+
+.messages {
+	height: 80%;
+	overflow-y: scroll;
+	display: flex;
+	flex-direction: column;
+}
+
+.sender {
+	border-top: 2px solid #004DFF;
+	display: flex;
+	align-items: center;
+	height: 20%;
+	width: 100%;
+}
+
+.sender__form {
+	margin-left: 10%;
+	width: 100%;
+	display: flex;
+	align-items: center;
+}
+
+#sender__message {
+	padding: 10px 0 10px 10px;
+	width: 25%;
+	height: 100%;
+}
+
+.sender__send {
+	background-color: transparent;
+	border: 1px solid grey;
+	outline: none;
+	height:  100%;
+	margin-left: 25px;
+}
+
+.message {
+	height: auto;
+}
+
+.chat__title {
+    font-size: 22px;
+    margin: 16px 0;
+}
+.chat__last-message {
+    font-size: 16px;
+    margin: 0;
+}
+
+.chat__create-link {
+    font-size: 24px;
+    font-weight: 700;
+    color: blue;
+    padding: 5px;
+    border: 2px solid grey;
+}
+
+.exit {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 15px;
+}
+
+.exit__button {
+    font-size: 24px;
+    padding: 5px;
+    border: 2px solid grey;
+    margin-right: 15px;
+}
+
+.exit__chat-button {
+    font-size: 24px;
+    padding: 5px;
+    border: 2px solid grey;
+}
+
+
+@media(max-width: 1000px){
+	#sender__message {
+		width: 100%;
+	}
+}

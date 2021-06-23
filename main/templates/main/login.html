@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Login</title>
+	<link rel="stylesheet" href="{% static 'main/login.css' %}">
+	<link href="https://fonts.googleapis.com/css2?family=Open+Sans&display=swap" rel="stylesheet">
+</head>
+<body>
+	<section class="login">
+		<div class="container">
+			<div class="login__inner">
+				<h1 class="login__title">
+					Login
+				</h1>
+				<div class="login__fields">
+					<form method="post" class="login__form">
+						{% csrf_token %}
+						{{ form.name }}
+						{{ form.password }}
+						<input class="login__submit" type="submit" value="Enter">
+						<p class="login__errors">{{ error }}</p>
+					</form>
+				</div>
+				<p class="login__signup">
+					Not registered yet?
+					<a href="{% url 'signup' %}" class="login__help-link">Register!
+					</a>
+				</p>
+				<p class="login__help">
+					Need help?
+					<a href="#" class="login__help-link">Please click here...</a>
+				</p>
+			</div>
+		</div>
+	</section>
+	<script>
+		document.getElementById('id_name').placeholder = 'Name';
+		document.getElementById('id_password').placeholder = 'Password';
+	</script>
+</body>
+</html>

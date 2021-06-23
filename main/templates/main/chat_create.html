@@ -1,0 +1,18 @@
+<!DOCTYPE>
+<html>
+<head>
+    <title>Create chat</title>
+</head>
+<body>
+<form method="POST">
+    {% csrf_token %}
+    <input type="text" name="title" required class="form__title">
+    <select name="users" class="form__select">
+        {% for user in users %}
+        <option value="{{ user.pk }}">{{ user.name }}</option>
+        {% endfor %}
+    </select>
+    <input type="submit">
+</form>
+</body>
+</html>

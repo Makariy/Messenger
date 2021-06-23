@@ -1,0 +1,40 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Messanger</title>
+	<link rel="stylesheet" type="text/css" href="{% static 'main/main.css' %}">
+</head>
+<body>
+	<div class="exit">
+			<a href="{% url 'chats_handler' %}?action=exit" class="exit__button">Exit account</a>
+	</div>
+	<section class="messanger">
+		<div class="container">
+			<div class="message-window">
+				<div class="chat__create">
+					<a href="{% url 'chats_handler' %}?action=create_chat" class="chat__create-link">Create new chat</a>
+				</div>
+				<div class="messages">
+					{% for display in displays %}
+					<a href="{% url 'chats_handler' %}?action=get_chat&chat_name={{ display.0.title }}">
+						<div class="chat" id="{{ display.0.pk }}">
+							<h4 class="chat__title">{{ display.0.title }}</h4>
+							<p class="chat__last-message">
+								{% if display.1 %}
+								{{ display.1.author.name }}: {{ display.1.message }}
+								{% else %}
+								There are no messages right now. You can be first to write something!
+								{% endif %}
+							</p>
+						</div>
+					</a>
+					{% endfor %}
+				</div>
+			</div>
+		</div>
+	</section>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{% for message in messages %}
+<div class="message" id="{{ message.pk }}">
+  <h4 class="message__author">{{ message.author.name }}</h4>
+  <p class="message__inner">{{ message.message }}</p>
+</div>
+{% endfor %}
