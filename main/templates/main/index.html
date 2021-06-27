@@ -8,13 +8,15 @@
 	<link rel="stylesheet" type="text/css" href="{% static 'main/main.css' %}">
 </head>
 <body>
-	<div class="exit">
-		<a class="exit__button" href="{% url 'chats_handler' %}?action=exit">
-			Exit account
-		</a>
-		<a class="exit__chat-button" href="{% url 'chats_handler' %}?action=exit_chat">
-			Exit chat
-		</a>
+	<div class="menu">
+		<div class="exit">
+			<a class="exit__button" href="{% url 'chats_handler' %}?action=exit">
+				Exit account
+			</a>
+			<a class="exit__chat-button" href="{% url 'chats_handler' %}?action=exit_chat">
+				Exit chat
+			</a>
+		</div>
 	</div>
 	<section class="messanger">
 		<div class="container">

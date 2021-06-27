@@ -8,8 +8,13 @@
 	<link rel="stylesheet" type="text/css" href="{% static 'main/main.css' %}">
 </head>
 <body>
-	<div class="exit">
-			<a href="{% url 'chats_handler' %}?action=exit" class="exit__button">Exit account</a>
+	<div class="menu">
+		<div class="user-settings">
+			<a href="{% url 'user_settings' %}" class="user-settings__link">User settings</a>
+		</div>
+		<div class="exit">
+				<a href="{% url 'chats_handler' %}?action=exit" class="exit__button">Exit account</a>
+		</div>
 	</div>
 	<section class="messanger">
 		<div class="container">

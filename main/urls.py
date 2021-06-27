@@ -6,6 +6,7 @@ from .views import Authorization
 from .views import Registration
 from .views import ChatsHandler
 from .views import ChatsCreator
+from .views import UserSettings
 
 
 main_page = MainPage()
@@ -14,6 +15,7 @@ authorization_page = Authorization()
 registration_page = Registration()
 chats_handler = ChatsHandler()
 chats_creator = ChatsCreator()
+user_settings = UserSettings()
 
 urlpatterns = [
 	path('', main_page.handle, name='main'),
@@ -21,5 +23,6 @@ urlpatterns = [
 	path('signup', registration_page.handle, name='signup'),
 	path('request', message_handler.handle, name='message_handler'),
 	path('chats', chats_handler.handle, name='chats_handler'),
-	path('create', chats_creator.handle, name='create_chat')
+	path('create', chats_creator.handle, name='create_chat'),
+	path('user_settings', user_settings.handle, name='user_settings')
 ]

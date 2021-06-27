@@ -114,7 +114,7 @@ class Registration(PageBase):
         context = {'form': UserForm}
         if not params == ():
             context['error'] = params[0]
-        return HttpResponse(render(request, 'main/signup.html', context))
+        return render(request, 'main/signup.html', context)
 
 
 class MessagesHandler(PageBase):
@@ -190,7 +190,7 @@ class ChatsHandler(PageBase):
     def handle(self, request: HttpRequest, *params, **args):
         if Authorization.check_user(request):
             return super().handle(request, *params, **args)
-        return HttpResponse('')
+        return redirect(reverse_lazy('main'))
 
     def post(self, request: HttpRequest, *params, **args):
         return self.redirect('main', {'user_name': None, 'user_password': None})
@@ -245,17 +245,30 @@ class ChatsCreator(PageBase):
         return render(request, 'main/chat_create.html', {'users': users})
 
     def post(self, request: HttpRequest, *params, **args):
+        print(request.POST)
         if ChatsCreator.check_chat(request):
             chat = Chat()
             chat.title = request.POST.get('title')
             chat.save()
             chat.users.add(Authorization.get_user(request))
-            for user_id in request.POST.get('users'):
+            users_id = request.POST.getlist('users')
+            print(users_id)
+            for id in users_id:
                 try:
-                    chat.users.add(User.objects.all().get(pk=int(user_id)))
+                    chat.users.add(User.objects.all().get(pk=int(id)))
                 except ObjectDoesNotExist:
                     pass
                 except ValueError:
                     pass
 
         return self.redirect('chats_handler')
+
+
+class UserSettings(PageBase):
+    def get(self, request: HttpRequest, *params, **args):
+        try:
+            user = Authorization.get_user(request)
+        except ObjectDoesNotExist:
+            return redirect(reverse_lazy('main'))
+
+        return render(request, 'main/user_settings.html', {'user': user})

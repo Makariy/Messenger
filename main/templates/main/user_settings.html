@@ -1,0 +1,34 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+        "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+    <title>User settings</title>
+</head>
+<body>
+  <div class="exit">
+    <a href="{% url 'main' %}" class="exit__link">Chats</a>
+  </div>
+  <div class="container">
+    <div class="user-name">
+      <p class="user-name__text">
+        Name: {{ user.name }}
+      </p>
+    </div>
+    <div class="user-password">
+      <p class="user-password__text">
+        Password: {{ user.password }}
+      </p>
+    </div>
+    <div class="user-mail">
+      <p class="user-mail__text">
+        Mail: {{ user.mail }}
+      </p>
+    </div>
+    <div class="user-registered_date">
+      <p class="user-registered_date__text">
+        Registered date: {{ user.registered_date|date:"d:m:Y" }}
+      </p>
+    </div>
+  </div>
+</body>
+</html>
