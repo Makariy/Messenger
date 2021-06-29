@@ -67,6 +67,11 @@ class Authorization(PageBase):
             return "Incorrect password"
         return ''
 
+    def handle(self, request: HttpRequest, *params, **args):
+        if Authorization.check_user(request):
+            return redirect(reverse_lazy('main'))
+        return super().handle(request, *params, **args)
+
     def post(self, request: HttpRequest, *params, **args):
         user = UserForm(request.POST)
         db_user = User.objects.all().filter(name=user.data['name'])
@@ -98,6 +103,11 @@ class Registration(PageBase):
             return "This mail is already used"
         return ''
 
+    def handle(self, request: HttpRequest, *params, **args):
+        if Authorization.check_user(request):
+            return redirect(reverse_lazy('main'))
+        return super().handle(request, *params, **args)
+
     def post(self, request, *params, **args):
         post = UserForm(request.POST)
         error = self.check_user(post.data)
@@ -121,30 +131,22 @@ class MessagesHandler(PageBase):
     @csrf_exempt
     def handle(self, request, *params, **args):
         if Authorization.check_user(request):
-            if request.method == 'POST':
-                return self.post(request, *params, **args)
-            else:
-                return self.get(request, *params, **args)
+            return super().handle(request, *params, **args)
         else:
-            return HttpResponse("Don't try to hack me bitch")
+            return redirect(reverse_lazy('main'))
 
     # User check is in handle function
     def get(self, request, *params, **args):
         try:
             message_id = request.GET.get('message_id')
             message_id = int(message_id)
-            if message_id == -2:
-                Message.objects.all().delete()
-        except:
-            return self.redirect('main')
-
-        try:
             chat = Chat.objects.all().get(title=request.COOKIES.get('chat_name'))
-        except ObjectDoesNotExist:
+        except:
             return self.redirect('main')
 
         if message_id == -1:
             return render(request, 'main/messages.html', {'messages': Message.objects.all().filter(chat=chat)})
+
         new_messages = []
         for message in Message.objects.all().filter(chat=chat):
             if message.pk > message_id:
@@ -239,6 +241,11 @@ class ChatsCreator(PageBase):
             if not now_user == user:
                 users.append(user)
         return users
+
+    def handle(self, request: HttpRequest, *params, **args):
+        if Authorization.check_user(request):
+            return self.handle(request, *params, **args)
+        return redirect(reverse_lazy('main'))
 
     def get(self, request: HttpRequest, *params, **args):
         users = self.get_users(request)
