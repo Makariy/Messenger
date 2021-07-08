@@ -115,7 +115,6 @@ class Registration(PageBase):
             return self.get(request, error)
         print(post.data['name'], post.data['password'], post.data['mail'])
         user = post.save()
-        user.save()
         ret = redirect(reverse_lazy('main'))
         self.set_cookies(ret, {'user_name': user.name, 'user_password': StringHasher.get_hash(user.password)})
         return ret
@@ -156,11 +155,13 @@ class MessagesHandler(PageBase):
     # User check is in handle function
     def post(self, request, *params, **args):
         text = request.POST.get('message')
+        user = Authorization.get_user(request)
         if text:
             author = User.objects.all().get(name=request.COOKIES.get('user_name'))
             chat = Chat.objects.all().get(title=request.COOKIES.get('chat_name'))
-            message = Message(author=author, chat=chat, message=text)
-            message.save()
+            if chat in Chat.objects.all().filter(users=user):
+                message = Message(author=author, chat=chat, message=text)
+                message.save()
 
         return HttpResponse('')
 
@@ -177,15 +178,12 @@ class MainPage(PageBase):
             return self.redirect('chats_handler')
 
         try:
-            chat = Chat.objects.all().get(title=request.COOKIES.get('chat_name'))
+            chat = Chat.objects.all().get(title=chat_title)
         except ObjectDoesNotExist:
             return self.redirect('chats_handler')
         messages = Message.objects.all().filter(chat=chat)
         context = {'messages': messages}
         return render(request, 'main/index.html', context)
-
-    def post(self, request, *params, **args):
-        return self.redirect('main', {'user_name': None, 'user_password': None, 'chat_name': None})
 
 
 class ChatsHandler(PageBase):
@@ -193,9 +191,6 @@ class ChatsHandler(PageBase):
         if Authorization.check_user(request):
             return super().handle(request, *params, **args)
         return redirect(reverse_lazy('main'))
-
-    def post(self, request: HttpRequest, *params, **args):
-        return self.redirect('main', {'user_name': None, 'user_password': None})
 
     def get(self, request: HttpRequest, *params, **args):
         action = request.GET.get('action')
@@ -244,7 +239,7 @@ class ChatsCreator(PageBase):
 
     def handle(self, request: HttpRequest, *params, **args):
         if Authorization.check_user(request):
-            return self.handle(request, *params, **args)
+            return super().handle(request, *params, **args)
         return redirect(reverse_lazy('main'))
 
     def get(self, request: HttpRequest, *params, **args):
@@ -252,14 +247,12 @@ class ChatsCreator(PageBase):
         return render(request, 'main/chat_create.html', {'users': users})
 
     def post(self, request: HttpRequest, *params, **args):
-        print(request.POST)
         if ChatsCreator.check_chat(request):
             chat = Chat()
             chat.title = request.POST.get('title')
             chat.save()
             chat.users.add(Authorization.get_user(request))
             users_id = request.POST.getlist('users')
-            print(users_id)
             for id in users_id:
                 try:
                     chat.users.add(User.objects.all().get(pk=int(id)))

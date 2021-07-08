@@ -26,3 +26,4 @@ urlpatterns = [
 	path('create', chats_creator.handle, name='create_chat'),
 	path('user_settings', user_settings.handle, name='user_settings')
 ]
+
