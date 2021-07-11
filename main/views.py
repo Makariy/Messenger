@@ -80,8 +80,7 @@ class Authorization(PageBase):
             return self.get(request, error)
 
         ret = redirect(reverse_lazy('main'))
-        self.set_cookies(ret, {'user_name': user.data['name'], 'user_password': StringHasher.get_hash(db_user[0].password),
-                               'chat': None})
+        self.set_cookies(ret, {'user_name': user.data['name'], 'user_password': StringHasher.get_hash(db_user[0].password)})
         return ret
 
     def get(self, request: HttpRequest, *params, **args):
