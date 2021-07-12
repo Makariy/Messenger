@@ -7,9 +7,13 @@ from .routine import StringHasher
 
 from .views import *
 
-import datetime
+import sys
 
 # Create your tests here.
+
+
+def get_functions_class(func):
+    return vars(sys.modules[func.__module__])[func.__qualname__.split('.')[0]]
 
 
 class UserTest(TestCase):
@@ -25,10 +29,10 @@ class UserTest(TestCase):
         return client.post('/signin', data={'name': self.user.name, 'password': self.user.password}, follow=True)
 
     def test_1_user_can_login(self):
-        request = self.register(self.client)
+        request = self.client.post('/signin', {'name': self.user.name, 'password': self.user.password})
 
-        # Assert it was the right function and the user was registered
-        self.assertEquals(request.resolver_match.func.__name__, Authorization.handle.__name__)
+        # Assert it was the right function and the user was registered right
+        self.assertEquals(get_functions_class(request.resolver_match.func), Authorization)
         self.assertEquals(self.user.name, self.client.cookies.get('user_name').value)
         self.assertEquals(StringHasher.get_hash(self.user.password), self.client.cookies.get('user_password').value)
 
@@ -37,12 +41,12 @@ class UserTest(TestCase):
 
         # Assert it was the right function and the user got the chat
         request = self.client.get('/chats?action=get_chat&chat_name=' + self.chat.title)
-        self.assertEquals(request.resolver_match.func.__name__, ChatsHandler.handle.__name__)
+        self.assertEquals(get_functions_class(request.resolver_match.func), ChatsHandler)
         self.assertEquals(self.client.cookies.get('chat_name').value, self.chat.title)
 
         # Assert it was the right function and the user sent the message
         request = self.client.post('/request', data={'message': 'Hello'})
-        self.assertEquals(request.resolver_match.func.__name__, MessagesHandler.handle.__name__)
+        self.assertEquals(get_functions_class(request.resolver_match.func), MessagesHandler)
         self.assertEquals(Message.objects.all().last().message, 'Hello')
         self.assertEquals(Message.objects.all().last().author, self.user)
         self.assertEquals(Message.objects.all().last().chat, self.chat)
