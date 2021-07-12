@@ -46,10 +46,5 @@ class User(models.Model):
         ordering = ['-name']
 
     def __str__(self):
-        s = ''
-        s += 'Name: ' + str(self.name) + '\n'
-        s += 'Password: ' + str(self.password) + '\n'
-        s += 'Mail: ' + str(self.mail) + '\n'
-        s += 'Registered date: ' + str(self.registered_date)
-        return s
+        return str(self.name)
 
