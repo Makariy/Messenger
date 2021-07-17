@@ -34,7 +34,7 @@ class UserTest(TestCase):
         self.chat.save()
         self.chat.users.add(self.user)
 
-    def register(self, client):
+    def login(self, client):
         return client.post('/signin', data={'name': self.user.name, 'password': self.user.password}, follow=True)
 
     def test_1_user_can_login(self):
@@ -45,8 +45,17 @@ class UserTest(TestCase):
         self.assertEquals(self.user.name, self.client.cookies.get('user_name').value)
         self.assertEquals(StringHasher.get_hash(self.user.password), self.client.cookies.get('user_password').value)
 
-    def test_2_user_can_send_message(self):
-        self.register(self.client)
+    def test_2_user_can_register(self):
+        request = self.client.post('/signup', data={'name': 'TestRegisterUser', 'password': 'Test123321', 'mail': 'testregisteruser@gmail.com'}, follow=True)
+
+        self.assertEquals(request.redirect_chain[-1], ('/chats', 302))
+        self.assertEquals(assert_not_raises(User.objects.all().get, name='TestRegisterUser'), True)
+        self.assertEquals(User.objects.all().get(name='TestRegisterUser').password, 'Test123321')
+        self.assertEquals(User.objects.all().get(name='TestRegisterUser').mail, 'testregisteruser@gmail.com')
+
+
+    def test_3_user_can_send_message(self):
+        self.login(self.client)
 
         # Assert it was the right function and the user got the chat
         request = self.client.get('/chats?action=get_chat&chat_name=' + self.chat.title)
@@ -60,15 +69,34 @@ class UserTest(TestCase):
         self.assertEquals(Message.objects.all().last().author, self.user)
         self.assertEquals(Message.objects.all().last().chat, self.chat)
 
-    def test_3_user_can_create_chat(self):
-        self.register(self.client)
+    def test_4_user_can_create_chat(self):
+        self.login(self.client)
         second_user = User(name='TestUser2', password='TestUser2', mail='testmail2@gmail.com')
         second_user.save()
 
         # Assert it was the right function and the chat was created
         request = self.client.post('/create', data={'title': 'TestCreatedChat', 'users': [second_user.pk]})
-        self.assertEquals(request.resolver_match.func.__name__, ChatsCreator.handle.__name__)
+        self.assertEquals(get_functions_class(request.resolver_match.func), ChatsCreator)
         self.assertEquals(assert_not_raises(Chat.objects.all().get, title='TestCreatedChat'), True, msg="The chat hadn't been created")
         self.assertEquals(second_user, Chat.objects.all().get(title='TestCreatedChat').users.first())
         self.assertEquals(self.user, Chat.objects.all().get(title='TestCreatedChat').users.last())
 
+    def test_5_user_cant_register_wrong(self):
+        request = self.client.post('/signup', data={'name': '', 'password': 'Test123321', 'mail': 'testregisteruser@gmail.com'}, follow=True)
+        self.assertEquals(request.redirect_chain, [])
+        request = self.client.post('/signup', data={'name': '', 'password': '', 'mail': 'testregisteruser@gmail.com'}, follow=True)
+        self.assertEquals(request.redirect_chain, [])
+        request = self.client.post('/signup', data={'name': 'TestCreatedChat', 'password': 'Test123321', 'mail': 'testregisteruser@gmail'}, follow=True)
+        self.assertEquals(request.redirect_chain, [])
+
+    def test_5_unknown_user_cant_send_message(self):
+        self.client.cookies['chat_name'] = 'TestChat'
+        request = self.client.post('/request', data={'message': 'Test'})
+        self.assertEquals(request.url, '/')
+
+
+    def test_6_user_cant_send_to_wrong_chat(self):
+        self.login(self.client)
+        self.client.cookies['chat_name'] = 'Chat'
+        request = self.client.post('/request', data={'message': 'Test'})
+        self.assertEquals(request.url, '/')

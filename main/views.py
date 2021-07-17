@@ -110,8 +110,11 @@ class Registration(PageBase):
     def post(self, request, *params, **args):
         post = UserForm(request.POST)
         error = self.check_user(post.data)
-        if not error == '' and post.is_valid():
+        if not error == '':
             return self.get(request, error)
+        elif not post.is_valid():
+            return self.get(request, 'The form data is not valid')
+
         print(post.data['name'], post.data['password'], post.data['mail'])
         user = post.save()
         ret = redirect(reverse_lazy('main'))
@@ -156,13 +159,17 @@ class MessagesHandler(PageBase):
         text = request.POST.get('message')
         user = Authorization.get_user(request)
         if text:
-            author = User.objects.all().get(name=request.COOKIES.get('user_name'))
-            chat = Chat.objects.all().get(title=request.COOKIES.get('chat_name'))
-            if chat in Chat.objects.all().filter(users=user):
-                message = Message(author=author, chat=chat, message=text)
-                message.save()
+            try:
+                author = User.objects.all().get(name=request.COOKIES.get('user_name'))
+                chat = Chat.objects.all().get(title=request.COOKIES.get('chat_name'))
+                if chat in Chat.objects.all().filter(users=user):
+                    message = Message(author=author, chat=chat, message=text)
+                    message.save()
+                    return HttpResponse('')
+            except ObjectDoesNotExist:
+                pass
 
-        return HttpResponse('')
+        return self.redirect('main')
 
 
 class MainPage(PageBase):

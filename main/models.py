@@ -24,7 +24,7 @@ class Message(models.Model):
 
 class Chat(models.Model):
     title = models.CharField(max_length=30, verbose_name='Chat name')
-    users = models.ManyToManyField('User', null=False, default=None, verbose_name='Chat members')
+    users = models.ManyToManyField('User', verbose_name='Chat members')
 
     def __str__(self):
         s = ''
