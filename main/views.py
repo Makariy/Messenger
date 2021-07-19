@@ -142,8 +142,11 @@ class MessagesHandler(PageBase):
             message_id = request.GET.get('message_id')
             message_id = int(message_id)
             chat = Chat.objects.all().get(title=request.COOKIES.get('chat_name'))
+            user = Authorization.get_user(request)
+            if not chat.users.get(name=user.name) == user:
+                return HttpResponse('')
         except:
-            return self.redirect('main')
+            return HttpResponse('')
 
         if message_id == -1:
             return render(request, 'main/messages.html', {'messages': Message.objects.all().filter(chat=chat)})
