@@ -42,10 +42,11 @@
 	</section>
 </body>
 	<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
-	<script>
+</html>
+
+<script>
 
 		var getting_new_messages = null;
-		var checking_connection = null;		
 
 		function getLastMessage() {
 			var messages = document.getElementsByClassName("message");
@@ -54,30 +55,23 @@
 			return null;
 		}
 
-		async function checkIfConnectionAvailable() {
-			try {
-				await $.get("/request", {'message_id': -1})
-			}
-			catch {
-				return;
-			}
-			clearInterval(checking_connection);
-			setInterval(getNewMessages, 200);
- 		}
-
 		async function getNewMessages() {
 			var last = getLastMessage();
 			var last_id = '-1';
 			if (last)
 				last_id = last.id;
 		
-			await $.get("/request", {'message_id': last_id}).done(
+			await $.get("/request", {'message_id': last_id}, timeout=1000).done(
 				function(data) {
 					if (data){
 						document.getElementsByClassName('messages')[0].innerHTML += data;
 					}
 				}
-			);	
+			).fail(function(xhr, status, a) {
+					console.log("Connection error");
+					document.location.href = '';
+				}
+			);
 		}
 
 		function scrollToLastMessage() {
@@ -86,16 +80,17 @@
 				last.scrollIntoView();
 		}
 		
-		getting_new_messages = setInterval(getNewMessages, 200);
 		
 		async function send() {
 			var message = document.getElementById("sender__message").value;
 			document.getElementById('sender__message').value = '';
-			clearInterval(getting_new_messages);
-			await $.post("/request", {'message': message});
+			window.clearInterval(getting_new_messages);
+
+			await $.post("/request", {'message': message}, timeout=1000);
 			await getNewMessages();
 			scrollToLastMessage();
-			getting_new_messages = setInterval(getNewMessages, 200);
+
+			getting_new_messages = window.setInterval(getNewMessages, 200);
 		}
 
 		$('#sender__message').keyup(function(event) {
@@ -104,6 +99,6 @@
 			}
 		})
 
+		getting_new_messages = window.setInterval(getNewMessages, 200);
 		window.onload = scrollToLastMessage;
 	</script>
-</html>
