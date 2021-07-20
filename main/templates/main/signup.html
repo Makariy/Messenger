@@ -25,10 +25,14 @@
 						<p class="login__errors">{{ error }}</p>
 					</form>
 				</div>
+				<p class="login__signin">
+					Already registered?
+					<a href="{% url 'login'  %}" class="login__help-link">Login!
+					</a>
+				</p>
 				<p class="login__help">
 					Need help?
-					<a href="#" class="login__help-link">Please click here...
-					</a>
+					<a href="#" class="login__help-link">Please click here...</a>
 				</p>
 			</div>
 		</div>

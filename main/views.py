@@ -149,10 +149,10 @@ class MessagesHandler(PageBase):
             return HttpResponse('')
 
         if message_id == -1:
-            return render(request, 'main/messages.html', {'messages': Message.objects.all().filter(chat=chat)})
+            return render(request, 'main/messages.html', {'messages': Message.objects.all().filter(chat=chat).order_by('pk')})
 
         new_messages = []
-        for message in Message.objects.all().filter(chat=chat):
+        for message in Message.objects.all().filter(chat=chat).order_by('pk'):
             if message.pk > message_id:
                 new_messages.append(message)
         return render(request, 'main/messages.html', {'messages': new_messages})

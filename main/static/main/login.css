@@ -75,6 +75,10 @@ body {
     margin: 0;
 }
 
+.login__signin {
+    margin: 0;
+}
+
 .login__title {
 	color: #007cad;
 	font-size: 40px;

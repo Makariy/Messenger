@@ -44,6 +44,8 @@
 	<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
 	<script>
 
+		var getting_new_messages = null;
+		var checking_connection = null;		
 
 		function getLastMessage() {
 			var messages = document.getElementsByClassName("message");
@@ -52,19 +54,30 @@
 			return null;
 		}
 
+		async function checkIfConnectionAvailable() {
+			try {
+				await $.get("/request", {'message_id': -1})
+			}
+			catch {
+				return;
+			}
+			clearInterval(checking_connection);
+			setInterval(getNewMessages, 200);
+ 		}
+
 		async function getNewMessages() {
 			var last = getLastMessage();
 			var last_id = '-1';
 			if (last)
 				last_id = last.id;
-
+		
 			await $.get("/request", {'message_id': last_id}).done(
 				function(data) {
 					if (data){
 						document.getElementsByClassName('messages')[0].innerHTML += data;
 					}
 				}
-			);
+			);	
 		}
 
 		function scrollToLastMessage() {
@@ -72,13 +85,25 @@
 			if (last)
 				last.scrollIntoView();
 		}
-
+		
+		getting_new_messages = setInterval(getNewMessages, 200);
+		
 		async function send() {
 			var message = document.getElementById("sender__message").value;
+			document.getElementById('sender__message').value = '';
+			clearInterval(getting_new_messages);
 			await $.post("/request", {'message': message});
+			await getNewMessages();
+			scrollToLastMessage();
+			getting_new_messages = setInterval(getNewMessages, 200);
 		}
 
-		document.onload = scrollToLastMessage;
-		window.setInterval(getNewMessages, 300);
+		$('#sender__message').keyup(function(event) {
+			if (event.keyCode == 13) {
+   				$('.sender__send').click();
+			}
+		})
+
+		window.onload = scrollToLastMessage;
 	</script>
 </html>
