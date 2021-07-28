@@ -1,10 +1,11 @@
-import datetime, json
-import os
+import asyncio
+import websockets
+import threading
+from .sock.server import MessageServer
 
 from django.shortcuts import render
 from django.http import HttpRequest, HttpResponse
 
-from django.views.generic import edit
 from django.urls import reverse_lazy
 from django.shortcuts import redirect
 from django.core.exceptions import ObjectDoesNotExist
@@ -21,13 +22,13 @@ from .routine import StringHasher
 from .routine import PageBase
 
 
+
 """
     COOKIES are:
     'user_name'
     'user_password' (hashed)
     'chat_name'
 """
-
 
 
 
@@ -50,11 +51,11 @@ class Authorization(PageBase):
         return False
 
     @staticmethod
-    def get_user(request):
-        if request.COOKIES.get('user_name') and request.COOKIES.get('user_password'):
+    def get_user(cookies):
+        if cookies.get('user_name') and cookies.get('user_password'):
             try:
-                db_user = User.objects.all().get(name=request.COOKIES.get('user_name'))
-                if request.COOKIES.get('user_password') == StringHasher.get_hash(db_user.password):
+                db_user = User.objects.all().get(name=cookies.get('user_name'))
+                if cookies.get('user_password') == StringHasher.get_hash(db_user.password):
                     return db_user
             except ObjectDoesNotExist:
                 raise
@@ -142,7 +143,7 @@ class MessagesHandler(PageBase):
             message_id = request.GET.get('message_id')
             message_id = int(message_id)
             chat = Chat.objects.all().get(title=request.COOKIES.get('chat_name'))
-            user = Authorization.get_user(request)
+            user = Authorization.get_user(request.COOKIES)
             if not chat.users.get(name=user.name) == user:
                 return HttpResponse('')
         except:
@@ -160,7 +161,7 @@ class MessagesHandler(PageBase):
     # User check is in handle function
     def post(self, request, *params, **args):
         text = request.POST.get('message')
-        user = Authorization.get_user(request)
+        user = Authorization.get_user(request.COOKIES)
         if text:
             try:
                 author = User.objects.all().get(name=request.COOKIES.get('user_name'))
@@ -175,8 +176,24 @@ class MessagesHandler(PageBase):
         return self.redirect('main')
 
 
+def start_socket():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    server = MessageServer()
+
+    start_server = websockets.serve(server.handle, 'localhost', 8001)
+    loop.run_until_complete(start_server)
+    loop.run_forever()
+
+
+websocket_thread = threading.Thread(target=start_socket)
+
+
 class MainPage(PageBase):
     def handle(self, request, *params, **args):
+        if not websocket_thread.is_alive():
+            websocket_thread.start()
         if Authorization.check_user(request):
             return super().handle(request, *params, **args)
         return self.redirect('login')
@@ -217,7 +234,7 @@ class ChatsHandler(PageBase):
             return self.redirect('create_chat')
 
         if not action:
-            user = Authorization.get_user(request)
+            user = Authorization.get_user(request.COOKIES)
             chats = Chat.objects.filter(users__name=user.name)
             last_messages = [Message.objects.all().filter(chat=chat).order_by('pk').last() for chat in chats]
 
@@ -240,7 +257,7 @@ class ChatsCreator(PageBase):
 
     def get_users(self, request):
         users = []
-        now_user = Authorization.get_user(request)
+        now_user = Authorization.get_user(request.COOKIES)
         for user in User.objects.all():
             if not now_user == user:
                 users.append(user)
@@ -260,7 +277,7 @@ class ChatsCreator(PageBase):
             chat = Chat()
             chat.title = request.POST.get('title')
             chat.save()
-            chat.users.add(Authorization.get_user(request))
+            chat.users.add(Authorization.get_user(request.COOKIES))
             users_id = request.POST.getlist('users')
             for id in users_id:
                 try:
@@ -276,7 +293,7 @@ class ChatsCreator(PageBase):
 class UserSettings(PageBase):
     def get(self, request: HttpRequest, *params, **args):
         try:
-            user = Authorization.get_user(request)
+            user = Authorization.get_user(request.COOKIES)
         except ObjectDoesNotExist:
             return redirect(reverse_lazy('main'))
 

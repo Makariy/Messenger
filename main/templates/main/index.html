@@ -46,7 +46,7 @@
 
 <script>
 
-		var getting_new_messages = null;
+		var ws = null;
 
 		function getLastMessage() {
 			var messages = document.getElementsByClassName("message");
@@ -55,42 +55,10 @@
 			return null;
 		}
 
-		async function getNewMessages() {
-			var last = getLastMessage();
-			var last_id = '-1';
-			if (last)
-				last_id = last.id;
-		
-			await $.get("/request", {'message_id': last_id}, timeout=1000).done(
-				function(data) {
-					if (data){
-						document.getElementsByClassName('messages')[0].innerHTML += data;
-					}
-				}
-			).fail(function(xhr, status, a) {
-					console.log("Connection error");
-					document.location.href = '';
-				}
-			);
-		}
-
 		function scrollToLastMessage() {
 			var last = getLastMessage();
 			if (last)
 				last.scrollIntoView();
-		}
-		
-		
-		async function send() {
-			var message = document.getElementById("sender__message").value;
-			document.getElementById('sender__message').value = '';
-			window.clearInterval(getting_new_messages);
-
-			await $.post("/request", {'message': message}, timeout=1000);
-			await getNewMessages();
-			scrollToLastMessage();
-
-			getting_new_messages = window.setInterval(getNewMessages, 200);
 		}
 
 		$('#sender__message').keyup(function(event) {
@@ -99,6 +67,21 @@
 			}
 		})
 
-		getting_new_messages = window.setInterval(getNewMessages, 200);
+		function connect() {
+			ws = new WebSocket('ws://' + window.location.hostname + ':8001');
+			ws.onmessage = function(message) { $('.messages')[0].innerHTML +=  message.data; scrollToLastMessage() }
+			ws.onopen = function() {
+				ws.send(document.cookie);
+			}
+		}
+
+		function send() {
+			var input = document.getElementById('sender__message');
+			var message = input.value;
+			input.value = '';
+			ws.send(message);
+		}
+
 		window.onload = scrollToLastMessage;
+		connect();
 	</script>
