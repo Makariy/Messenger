@@ -17,8 +17,6 @@ class Socket:
 	socket = None
 
 
-
-
 async def get_user(cookies):
 	loop = asyncio.get_event_loop()
 	db_user = await loop.run_in_executor(None, lambda: User.objects.all().get(name=cookies['user_name']))
@@ -45,7 +43,7 @@ class MessageServer():
 			if not self.chats.get(chat.title):
 				self.chats[chat.title] = [socket,]
 			else:
-				self.chats[chat.title].append( socket )
+				self.chats[chat.title].append(socket)
 
 			self.sockets[websocket] = (socket, chat)
 			return True
@@ -59,14 +57,12 @@ class MessageServer():
 
 	async def send_message(self, socket, message):
 		template = loader.get_template('main/messages.html')
-		print(str(template.render({'messages': [message]})))
 		await socket.socket.send(str(template.render({'messages': [message]})))
 
 	async def handle(self, websocket, path):
 		try:
 			if not await self.register(websocket):
 				raise Exception()
-			print(self.chats)
 			sock, chat = self.sockets[websocket]
 			while True:
 				text = await websocket.recv()
@@ -74,7 +70,6 @@ class MessageServer():
 					message = Message(author=sock.user, chat=chat, message=text)
 					await asyncio.get_event_loop().run_in_executor(None, message.save)
 					await self.send_message(socket, message)
-
 		except:
 			pass
 		finally:

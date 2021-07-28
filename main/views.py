@@ -190,12 +190,12 @@ def start_socket(host):
 
 
 class MainPage(PageBase):
-    websocket_thread = None
+    websocket_thread = threading.Thread(target=lambda:print('You must restore this thread to create WebSocket thread'))
 
     def handle(self, request, *params, **args):
-        if self.websocket_thread == None:
-            websocket_thread = threading.Thread(target=start_socket, args=(request.get_host().split(':')[0], ))
-            websocket_thread.start()
+        if not self.websocket_thread.is_alive():
+            self.websocket_thread = threading.Thread(target=start_socket, args=(request.get_host().split(':')[0],))
+            self.websocket_thread.start()
         if Authorization.check_user(request):
             return super().handle(request, *params, **args)
         return self.redirect('login')
