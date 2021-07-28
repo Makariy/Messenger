@@ -176,23 +176,25 @@ class MessagesHandler(PageBase):
         return self.redirect('main')
 
 
-def start_socket():
+def start_socket(host):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
     server = MessageServer()
 
-    start_server = websockets.serve(server.handle, 'localhost', 8001)
+    start_server = websockets.serve(server.handle, host, 8001)
     loop.run_until_complete(start_server)
     loop.run_forever()
 
 
-websocket_thread = threading.Thread(target=start_socket)
 
 
 class MainPage(PageBase):
+    websocket_thread = None
+
     def handle(self, request, *params, **args):
-        if not websocket_thread.is_alive():
+        if self.websocket_thread == None:
+            websocket_thread = threading.Thread(target=start_socket, args=(request.get_host().split(':')[0], ))
             websocket_thread.start()
         if Authorization.check_user(request):
             return super().handle(request, *params, **args)
