@@ -10,7 +10,7 @@ from ..models import Chat, Message
 from ..routine import StringHasher
 
 
-class Socket:
+class Connection:
 	def __init__(self, user, socket):
 		self.user = user
 		self.socket = socket
@@ -24,7 +24,7 @@ async def run_sync(func):
 
 class MessageServer():
 	chats = {}
-	sockets = {}
+	connections = {}
 
 	def __init__(self):
 		self.commands = {
@@ -50,28 +50,27 @@ class MessageServer():
 
 		# Add user to correct chat query
 		if chat in chats:
-			socket = Socket(user=user, socket=websocket)
+			connection = Connection(user=user, socket=websocket)
 			if not self.chats.get(chat.title):
-				self.chats[chat.title] = [socket,]
+				self.chats[chat.title] = [connection,]
 			else:
-				self.chats[chat.title].append(socket)
+				self.chats[chat.title].append(connection)
 
-			self.sockets[websocket] = (socket, chat)
+			self.connections[websocket] = (connection, chat)
 			return True
 
 		return False
 
 	async def unregister(self, websocket):
-		if self.sockets.get(websocket):
-			socket, chat = self.sockets[websocket]
-			self.chats[chat.title].remove(socket)
+		if self.connections.get(websocket):
+			connection, chat = self.connections[websocket]
+			self.chats[chat.title].remove(connection)
 		await websocket.close()
 
-
-	async def _send_message(self, socket, message):
+	async def _send_message(self, connection, message):
 		template = loader.get_template('main/messages.html')
-		await socket.socket.send('send')
-		await socket.socket.send(str(template.render({'messages': [message], 'user': socket.user})))
+		await connection.socket.send('send')
+		await connection.socket.send(str(template.render({'messages': [message], 'user': connection.user})))
 
 	async def send(self, sock, chat, text):
 		for socket in self.chats[chat.title]:
@@ -79,15 +78,14 @@ class MessageServer():
 			await run_sync(message.save)
 			await self._send_message(socket, message)
 
-
-	async def delete(self, sock, chat, text):
+	async def delete(self, connection, chat, text):
 		try:
 			message = await run_sync(lambda: Message.objects.all().get(id=int(text)))
-			if await run_sync(lambda: sock.user == message.author):
+			if await run_sync(lambda: connection.user == message.author):
 				await run_sync(lambda: message.delete())
-				for socket in self.chats[chat.title]:
-					await socket.socket.send('del')
-					await socket.socket.send(text)
+				for _connection in self.chats[chat.title]:
+					await _connection.socket.send('del')
+					await _connection.socket.send(text)
 		except:
 			pass
 
@@ -95,7 +93,7 @@ class MessageServer():
 		try:
 			if not await self.register(websocket):
 				raise Exception()
-			sock, chat = self.sockets[websocket]
+			sock, chat = self.connections[websocket]
 			while True:
 				command = await websocket.recv()
 				func = self.commands.get(command)
