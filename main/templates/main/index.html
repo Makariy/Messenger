@@ -26,6 +26,11 @@
 					<div class="message" id="{{ message.pk }}">
 						<h4 class="message__author">{{ message.author.username }}</h4>
 						<p class="message__inner">{{ message.message }}</p>
+						<div class="message__actions">
+							{% if user == message.author %}
+								<button class="message__actions-delete" onclick="delete_message({{ message.pk }})">Delete</button>
+							{% endif %}
+						</div>
 					</div>
 					{% endfor %}
 				</div>
@@ -47,6 +52,7 @@
 <script>
 
 		var ws = null;
+		var command = '';
 
 		function getLastMessage() {
 			var messages = document.getElementsByClassName("message");
@@ -69,7 +75,20 @@
 
 		function connect() {
 			ws = new WebSocket('ws://' + window.location.hostname + ':8001');
-			ws.onmessage = function(message) { $('.messages')[0].innerHTML +=  message.data; scrollToLastMessage() }
+			ws.onmessage = function(message) {
+				if (command == '') {
+					command = message.data;
+					return;
+				}
+				if (command == 'send') {
+					$('.messages')[0].innerHTML +=  message.data;
+					scrollToLastMessage();
+				}
+				if (command == 'del') {
+					document.getElementById(message.data).remove();
+				}
+				command = '';
+			}
 			ws.onopen = function() {
 				data = $.get('get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data); });
 			}
@@ -79,7 +98,13 @@
 			var input = document.getElementById('sender__message');
 			var message = input.value;
 			input.value = '';
+			ws.send('send');
 			ws.send(message);
+		}
+
+		function delete_message(id) {
+			ws.send('del');
+			ws.send(id);
 		}
 
 		window.onload = scrollToLastMessage;

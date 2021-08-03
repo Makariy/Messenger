@@ -2,5 +2,10 @@
 <div class="message" id="{{ message.pk }}">
   <h4 class="message__author">{{ message.author.username }}</h4>
   <p class="message__inner">{{ message.message }}</p>
+  <div class="message__actions">
+    {% if user == message.author %}
+    <button class="message__actions-delete" onclick="delete_message({{ message.pk }})">Delete</button>
+    {% endif %}
+  </div>
 </div>
 {% endfor %}

@@ -115,7 +115,7 @@ class MessagesHandler(PageBase):
         for message in Message.objects.all().filter(chat=chat).order_by('pk'):
             if message.pk > message_id:
                 new_messages.append(message)
-        return render(request, 'main/messages.html', {'messages': new_messages})
+        return render(request, 'main/messages.html', {'messages': new_messages, 'user': user})
 
 
 def request_session_id(request):

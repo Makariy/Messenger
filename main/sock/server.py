@@ -18,12 +18,19 @@ class Socket:
 	user = None
 	socket = None
 
-
+async def run_sync(func):
+	return await asyncio.get_event_loop().run_in_executor(None, func)
 
 
 class MessageServer():
 	chats = {}
 	sockets = {}
+
+	def __init__(self):
+		self.commands = {
+			'send': self.send,
+			'del': self.delete,
+		}
 
 	def _get_user(self, session_id):
 		session = Session.objects.get(session_key=session_id)
@@ -31,15 +38,15 @@ class MessageServer():
 
 	async def get_user(self, session_id):
 		loop = asyncio.get_event_loop()
-		return await loop.run_in_executor(None, lambda: self._get_user(session_id))
+		return await run_sync(lambda: self._get_user(session_id))
 
 	async def register(self, websocket):
 		cookies = parse_cookie(await websocket.recv())
 
 		user = await self.get_user(cookies['sessionid'])
-		chat = await asyncio.get_event_loop().run_in_executor(None, lambda: Chat.objects.all().get(title=cookies.get('chat_name')))
+		chat = await run_sync(lambda: Chat.objects.all().get(title=cookies.get('chat_name')))
 
-		chats = await asyncio.get_event_loop().run_in_executor(None, lambda: tuple(Chat.objects.all().filter(users__username=user.username)))
+		chats = await run_sync(lambda: tuple(Chat.objects.all().filter(users__username=user.username)))
 
 		# Add user to correct chat query
 		if chat in chats:
@@ -60,9 +67,29 @@ class MessageServer():
 			self.chats[chat.title].remove(socket)
 		await websocket.close()
 
-	async def send_message(self, socket, message):
+
+	async def _send_message(self, socket, message):
 		template = loader.get_template('main/messages.html')
-		await socket.socket.send(str(template.render({'messages': [message]})))
+		await socket.socket.send('send')
+		await socket.socket.send(str(template.render({'messages': [message], 'user': socket.user})))
+
+	async def send(self, sock, chat, text):
+		for socket in self.chats[chat.title]:
+			message = Message(author=sock.user, chat=chat, message=text)
+			await run_sync(message.save)
+			await self._send_message(socket, message)
+
+
+	async def delete(self, sock, chat, text):
+		try:
+			message = await run_sync(lambda: Message.objects.all().get(id=int(text)))
+			if await run_sync(lambda: sock.user == message.author):
+				await run_sync(lambda: message.delete())
+				for socket in self.chats[chat.title]:
+					await socket.socket.send('del')
+					await socket.socket.send(text)
+		except:
+			pass
 
 	async def handle(self, websocket, path):
 		try:
@@ -70,11 +97,11 @@ class MessageServer():
 				raise Exception()
 			sock, chat = self.sockets[websocket]
 			while True:
-				text = await websocket.recv()
-				for socket in self.chats[chat.title]:
-					message = Message(author=sock.user, chat=chat, message=text)
-					await asyncio.get_event_loop().run_in_executor(None, message.save)
-					await self.send_message(socket, message)
+				command = await websocket.recv()
+				func = self.commands.get(command)
+				if func:
+					await func(sock, chat, await websocket.recv())
+
 		except:
 			pass
 		finally:

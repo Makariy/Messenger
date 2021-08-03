@@ -30,7 +30,7 @@ class Chat(models.Model):
         s = ''
         s += str(self.title)+'\nUsers:'
         for user in range(len(self.users.all())):
-            s += self.users.all()[user].name + ' '
+            s += self.users.all()[user].username + ' '
         return s
 
 

@@ -69,6 +69,13 @@ a {
 
 .message {
 	height: auto;
+	position: relative;
+}
+.message__actions {
+    position: absolute;
+    top: 0;
+    left: auto;
+    right: 0;
 }
 
 .chat__title {
