@@ -9,7 +9,7 @@
     <input type="text" name="title" required class="form__title">
     <select multiple name="users" class="form__select">
         {% for user in users %}
-        <option value="{{ user.pk }}">{{ user.name }}</option>
+        <option value="{{ user.pk }}">{{ user.username }}</option>
         {% endfor %}
     </select>
     <input type="submit">

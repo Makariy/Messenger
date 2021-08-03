@@ -24,7 +24,7 @@
 				<div class="messages">
 					{% for message in messages %}
 					<div class="message" id="{{ message.pk }}">
-						<h4 class="message__author">{{ message.author.name }}</h4>
+						<h4 class="message__author">{{ message.author.username }}</h4>
 						<p class="message__inner">{{ message.message }}</p>
 					</div>
 					{% endfor %}
@@ -71,7 +71,7 @@
 			ws = new WebSocket('ws://' + window.location.hostname + ':8001');
 			ws.onmessage = function(message) { $('.messages')[0].innerHTML +=  message.data; scrollToLastMessage() }
 			ws.onopen = function() {
-				ws.send(document.cookie);
+				data = $.get('get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data); });
 			}
 		}
 

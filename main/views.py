@@ -12,127 +12,86 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from django.views.decorators.csrf import csrf_exempt
 
-from .models import Message
-from .models import User
-from .models import Chat
+from django.contrib.auth.models import User
+from django.contrib.auth import get_user, authenticate, login, logout
+from django.contrib.auth.hashers import make_password
 
-from .forms import UserForm
+from .models import Message
+from .models import Chat
 
 from .routine import StringHasher
 from .routine import PageBase
 
 
 
-"""
-    COOKIES are:
-    'user_name'
-    'user_password' (hashed)
-    'chat_name'
-"""
-
-
 
 class Authorization(PageBase):
-    @staticmethod
-    def check_user(request):
-        '''
-        Checks the request passed as a parameter and returns True if he exists and has the same password
-        or returns False if not
-        '''
-        if request.COOKIES.get('user_name') and request.COOKIES.get('user_password'):
-            try:
-                db_user = User.objects.all().get(name=request.COOKIES.get('user_name'))
-                if request.COOKIES.get('user_password') == StringHasher.get_hash(db_user.password):
-                   return True
-
-            except ObjectDoesNotExist:
-                pass
-
-        return False
-
-    @staticmethod
-    def get_user(cookies):
-        if cookies.get('user_name') and cookies.get('user_password'):
-            try:
-                db_user = User.objects.all().get(name=cookies.get('user_name'))
-                if cookies.get('user_password') == StringHasher.get_hash(db_user.password):
-                    return db_user
-            except ObjectDoesNotExist:
-                raise
-        raise ObjectDoesNotExist()
-
-    def __check_user(self, user, db_user):
-        if not db_user:
-            return "User with this name doesn't exist"
-        if not db_user[0].password == user['password']:
-            return "Incorrect password"
-        return ''
+    def _check_user(self, data):
+        try:
+            user = User.objects.all().get(username=data.get('username'))
+            if not user.check_password(data.get('password')):
+                return 'Password incorrect'
+            else:
+                return ''
+        except:
+            return 'User with this name doesn\'t exist'
 
     def handle(self, request: HttpRequest, *params, **args):
-        if Authorization.check_user(request):
+        if not get_user(request).is_anonymous:
             return redirect(reverse_lazy('main'))
         return super().handle(request, *params, **args)
 
     def post(self, request: HttpRequest, *params, **args):
-        user = UserForm(request.POST)
-        db_user = User.objects.all().filter(name=user.data['name'])
-        error = self.__check_user(user.data, db_user)
-        if not error == '':
+        user = authenticate(username=request.POST['username'], password=request.POST['password'])
+        error = self._check_user(request.POST)
+        if not error == '' or not user:
             return self.get(request, error)
 
-        ret = redirect(reverse_lazy('main'))
-        self.set_cookies(ret, {'user_name': user.data['name'], 'user_password': StringHasher.get_hash(db_user[0].password)})
-        return ret
+        login(request, user)
+        return self.redirect('main')
 
     def get(self, request: HttpRequest, *params, **args):
-        context = {'form': UserForm}
-        if not params == ():
-            context['error'] = params[0]
+        context = {'error': params[0] if not params == () else ''}
         return HttpResponse(render(request, 'main/login.html', context))
 
 
 class Registration(PageBase):
     def check_user(self, user):
-        if (user['name'] == '') or (user['name'][0].isdigit()) or (len(user['name']) < 2):
+        if (user['username'] == '') or (user['username'][0].isdigit()) or (len(user['username']) < 2):
             return "Your name is too short or starts with a digit"
-        if (len(user['password']) < 6) or (not user['password'].lower().find(user['name'].lower()) == -1):
+        if (len(user['password']) < 6) or (not user['password'].lower().find(user['username'].lower()) == -1):
             return "Your password is too short or contains your name"
-        if User.objects.all().filter(name=user['name']).count() > 0:
+        if User.objects.all().filter(username=user['username']).count() > 0:
             return "This name is already used"
-        if User.objects.all().filter(mail=user['mail']).count() > 0:
+        if User.objects.all().filter(email=user['email']).count() > 0:
             return "This mail is already used"
         return ''
 
     def handle(self, request: HttpRequest, *params, **args):
-        if Authorization.check_user(request):
+        if not get_user(request).is_anonymous:
             return redirect(reverse_lazy('main'))
         return super().handle(request, *params, **args)
 
     def post(self, request, *params, **args):
-        post = UserForm(request.POST)
-        error = self.check_user(post.data)
+        data = request.POST
+        error = self.check_user(request.POST)
         if not error == '':
             return self.get(request, error)
-        elif not post.is_valid():
-            return self.get(request, 'The form data is not valid')
 
-        print(post.data['name'], post.data['password'], post.data['mail'])
-        user = post.save()
-        ret = redirect(reverse_lazy('main'))
-        self.set_cookies(ret, {'user_name': user.name, 'user_password': StringHasher.get_hash(user.password)})
-        return ret
+        print(request.POST)
+        user = User.objects.create_user(username=data['username'], password=data['password'], email=data['email'])
+        login(request, user)
+        return self.redirect('main')
 
     def get(self, request, *params, **args):
-        context = {'form': UserForm}
-        if not params == ():
-            context['error'] = params[0]
+        context = {'error': params[0] if not params == () else ''}
         return render(request, 'main/signup.html', context)
 
 
 class MessagesHandler(PageBase):
     @csrf_exempt
     def handle(self, request, *params, **args):
-        if Authorization.check_user(request):
+        if not get_user(request).is_anonymous:
             return super().handle(request, *params, **args)
         else:
             return redirect(reverse_lazy('main'))
@@ -142,9 +101,9 @@ class MessagesHandler(PageBase):
         try:
             message_id = request.GET.get('message_id')
             message_id = int(message_id)
+            user = get_user(request)
             chat = Chat.objects.all().get(title=request.COOKIES.get('chat_name'))
-            user = Authorization.get_user(request.COOKIES)
-            if not chat.users.get(name=user.name) == user:
+            if not chat.users.get(username=user.username) == user:
                 return HttpResponse('')
         except:
             return HttpResponse('')
@@ -158,23 +117,9 @@ class MessagesHandler(PageBase):
                 new_messages.append(message)
         return render(request, 'main/messages.html', {'messages': new_messages})
 
-    # User check is in handle function
-    def post(self, request, *params, **args):
-        text = request.POST.get('message')
-        user = Authorization.get_user(request.COOKIES)
-        if text:
-            try:
-                author = User.objects.all().get(name=request.COOKIES.get('user_name'))
-                chat = Chat.objects.all().get(title=request.COOKIES.get('chat_name'))
-                if chat in Chat.objects.all().filter(users=user):
-                    message = Message(author=author, chat=chat, message=text)
-                    message.save()
-                    return HttpResponse('')
-            except ObjectDoesNotExist:
-                pass
 
-        return self.redirect('main')
-
+def request_session_id(request):
+    return HttpResponse(request.COOKIES.get('sessionid'))
 
 def start_socket(host):
     loop = asyncio.new_event_loop()
@@ -187,8 +132,6 @@ def start_socket(host):
     loop.run_forever()
 
 
-
-
 class MainPage(PageBase):
     websocket_thread = threading.Thread(target=lambda:print('You must restore this thread to create WebSocket thread'))
 
@@ -196,7 +139,8 @@ class MainPage(PageBase):
         if not self.websocket_thread.is_alive():
             self.websocket_thread = threading.Thread(target=start_socket, args=(request.get_host().split(':')[0],))
             self.websocket_thread.start()
-        if Authorization.check_user(request):
+
+        if not get_user(request).is_anonymous:
             return super().handle(request, *params, **args)
         return self.redirect('login')
 
@@ -216,7 +160,7 @@ class MainPage(PageBase):
 
 class ChatsHandler(PageBase):
     def handle(self, request: HttpRequest, *params, **args):
-        if Authorization.check_user(request):
+        if not get_user(request).is_anonymous:
             return super().handle(request, *params, **args)
         return redirect(reverse_lazy('main'))
 
@@ -226,7 +170,8 @@ class ChatsHandler(PageBase):
         if action == 'exit_chat':
             return self.redirect('main', {'chat_name': None})
         if action == 'exit':
-            return self.redirect('main', {'user_name': None, 'user_password': None, 'chat_name': None})
+            logout(request)
+            return self.redirect('main')
 
         if action == 'get_chat':
             chat_redirect = request.GET.get('chat_name')
@@ -236,8 +181,8 @@ class ChatsHandler(PageBase):
             return self.redirect('create_chat')
 
         if not action:
-            user = Authorization.get_user(request.COOKIES)
-            chats = Chat.objects.filter(users__name=user.name)
+            user = get_user(request)
+            chats = Chat.objects.filter(users__username=user.username)
             last_messages = [Message.objects.all().filter(chat=chat).order_by('pk').last() for chat in chats]
 
             display = []
@@ -258,15 +203,13 @@ class ChatsCreator(PageBase):
         return True
 
     def get_users(self, request):
-        users = []
-        now_user = Authorization.get_user(request.COOKIES)
-        for user in User.objects.all():
-            if not now_user == user:
-                users.append(user)
+        now_user = get_user(request)
+        users = list(User.objects.all())
+        users.remove(now_user)
         return users
 
     def handle(self, request: HttpRequest, *params, **args):
-        if Authorization.check_user(request):
+        if not get_user(request).is_anonymous:
             return super().handle(request, *params, **args)
         return redirect(reverse_lazy('main'))
 
@@ -279,7 +222,7 @@ class ChatsCreator(PageBase):
             chat = Chat()
             chat.title = request.POST.get('title')
             chat.save()
-            chat.users.add(Authorization.get_user(request.COOKIES))
+            chat.users.add(get_user(request))
             users_id = request.POST.getlist('users')
             for id in users_id:
                 try:
@@ -295,7 +238,7 @@ class ChatsCreator(PageBase):
 class UserSettings(PageBase):
     def get(self, request: HttpRequest, *params, **args):
         try:
-            user = Authorization.get_user(request.COOKIES)
+            user = get_user(request)
         except ObjectDoesNotExist:
             return redirect(reverse_lazy('main'))
 

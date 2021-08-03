@@ -18,8 +18,8 @@
 				<div class="login__fields">
 					<form method="post" class="login__form">
 						{% csrf_token %}
-						{{ form.name }}
-						{{ form.password }}
+						<input type="text" name="username" id="id_name">
+						<input type="password" name="password" id="id_password">
 						<input class="login__submit" type="submit" value="Enter">
 						<p class="login__errors">{{ error }}</p>
 					</form>

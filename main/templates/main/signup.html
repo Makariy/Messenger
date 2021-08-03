@@ -18,9 +18,9 @@
 				<div class="login__fields">
 					<form method="post" class="login__form">
 						{% csrf_token %}
-						{{ form.name }}
-						{{ form.password }}
-                        {{ form.mail }}
+						<input type="text" name="username" id="id_name">
+						<input type="password" name="password" id="id_password">
+						<input type="email" name="email" id="id_email">
 						<input class="login__submit" type="submit" value="Sign up">
 						<p class="login__errors">{{ error }}</p>
 					</form>
@@ -40,7 +40,7 @@
 	<script>
 		document.getElementById('id_name').placeholder = 'Name';
 		document.getElementById('id_password').placeholder = 'Password';
-		document.getElementById('id_mail').placeholder = 'E-Mail';
+		document.getElementById('id_email').placeholder = 'E-Mail';
 	</script>
 </body>
 </html>

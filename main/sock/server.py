@@ -4,7 +4,9 @@ import websockets
 from django.http.cookie import parse_cookie
 from django.template import loader
 
-from ..models import User, Chat, Message
+from django.contrib.auth.models import User
+from django.contrib.sessions.models import Session
+from ..models import Chat, Message
 from ..routine import StringHasher
 
 
@@ -17,25 +19,27 @@ class Socket:
 	socket = None
 
 
-async def get_user(cookies):
-	loop = asyncio.get_event_loop()
-	db_user = await loop.run_in_executor(None, lambda: User.objects.all().get(name=cookies['user_name']))
-
-	if StringHasher.get_hash(db_user.password) == cookies.get('user_password'):
-		return db_user
 
 
 class MessageServer():
 	chats = {}
 	sockets = {}
 
+	def _get_user(self, session_id):
+		session = Session.objects.get(session_key=session_id)
+		return User.objects.all().get(id=session.get_decoded().get('_auth_user_id'))
+
+	async def get_user(self, session_id):
+		loop = asyncio.get_event_loop()
+		return await loop.run_in_executor(None, lambda: self._get_user(session_id))
+
 	async def register(self, websocket):
 		cookies = parse_cookie(await websocket.recv())
 
-		user = await get_user(cookies)
+		user = await self.get_user(cookies['sessionid'])
 		chat = await asyncio.get_event_loop().run_in_executor(None, lambda: Chat.objects.all().get(title=cookies.get('chat_name')))
 
-		chats = await asyncio.get_event_loop().run_in_executor(None, lambda: tuple(Chat.objects.all().filter(users__name=user.name)))
+		chats = await asyncio.get_event_loop().run_in_executor(None, lambda: tuple(Chat.objects.all().filter(users__username=user.username)))
 
 		# Add user to correct chat query
 		if chat in chats:
@@ -51,8 +55,9 @@ class MessageServer():
 		return False
 
 	async def unregister(self, websocket):
-		socket, chat = self.sockets[websocket]
-		self.chats[chat.title].remove(socket)
+		if self.sockets.get(websocket):
+			socket, chat = self.sockets[websocket]
+			self.chats[chat.title].remove(socket)
 		await websocket.close()
 
 	async def send_message(self, socket, message):
