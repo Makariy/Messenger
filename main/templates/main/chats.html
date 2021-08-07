@@ -29,7 +29,7 @@
 							<h4 class="chat__title">{{ display.0.title }}</h4>
 							<p class="chat__last-message">
 								{% if display.1 %}
-								{{ display.1.author.username }}: {{ display.1.message }}
+								{{ display.1.author.username }}: {% if display.1.type == 'text' %}{{ display.1.data.text }} {% else %} Photo {% endif %}
 								{% else %}
 								There are no messages right now. You can be first to write something!
 								{% endif %}
@@ -42,4 +42,31 @@
 		</div>
 	</section>
 </body>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
+<script>
+
+	var ws = null;
+	var chat_id = '';
+
+	function connect () {
+		ws = new WebSocket('ws://' + window.location.hostname + ':8002');
+		ws.onmessage = function(message) {
+			if (chat_id == '') {
+				chat_id = message.data;
+				return;
+			}
+			try{
+				document.getElementById(chat_id).getElementsByClassName('chat__last-message')[0].innerText = message.data;
+			}
+			catch {}
+			chat_id = '';
+		}
+		ws.onopen = function() {
+			data = $.get('get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data); });
+		}
+	}
+
+	connect();
+
+</script>
 </html>

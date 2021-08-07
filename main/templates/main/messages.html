@@ -1,10 +1,16 @@
 {% for message in messages %}
 <div class="message" id="{{ message.pk }}">
-  <h4 class="message__author">{{ message.author.username }}</h4>
-  <p class="message__inner">{{ message.message }}</p>
+  {% if message.type == 'text' %}
+    <h4 class="message__author">{{ message.author.username }}</h4>
+    <p class="message__inner">{{ message.data.text }}</p>
+  {% endif %}
+  {% if message.type == 'image' %}
+    <h4 class="message__author">{{ message.author.username }}</h4>
+    <img src="/file_upload?file_id={{ message.id }}" class="message__inner message__image">
+  {% endif %}
   <div class="message__actions">
     {% if user == message.author %}
-    <button class="message__actions-delete" onclick="delete_message({{ message.pk }})">Delete</button>
+      <button class="message__actions-delete" onclick="deleteMessage({{ message.pk }})">Delete</button>
     {% endif %}
   </div>
 </div>

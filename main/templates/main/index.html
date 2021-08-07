@@ -24,13 +24,19 @@
 				<div class="messages">
 					{% for message in messages %}
 					<div class="message" id="{{ message.pk }}">
-						<h4 class="message__author">{{ message.author.username }}</h4>
-						<p class="message__inner">{{ message.message }}</p>
-						<div class="message__actions">
-							{% if user == message.author %}
-								<button class="message__actions-delete" onclick="delete_message({{ message.pk }})">Delete</button>
-							{% endif %}
-						</div>
+					  {% if message.type == 'text' %}
+					  <h4 class="message__author">{{ message.author.username }}</h4>
+					  <p class="message__inner">{{ message.data.text }}</p>
+					  {% endif %}
+					  {% if message.type == 'image' %}
+					  <h4 class="message__author">{{ message.author.username }}</h4>
+					  <img src="/file_upload?file_id={{ message.id }}" class="message__inner message__image">
+					  {% endif %}
+					  <div class="message__actions">
+						{% if user == message.author %}
+						<button class="message__actions-delete" onclick="deleteMessage({{ message.pk }})">Delete</button>
+						{% endif %}
+					  </div>
 					</div>
 					{% endfor %}
 				</div>
@@ -40,6 +46,7 @@
 						<button onclick="send()" class="sender__send">
 							<img src="{% static 'main/send button.svg' %}">
 						</button>
+						<input type="file" id="sender__file" placeholder="Image">
 					</div>
 				</div>
 			</div>
@@ -50,7 +57,6 @@
 </html>
 
 <script>
-
 		var ws = null;
 		var command = '';
 
@@ -80,12 +86,15 @@
 					command = message.data;
 					return;
 				}
-				if (command == 'send') {
+				if (command == 'send_mes') {
 					$('.messages')[0].innerHTML +=  message.data;
 					scrollToLastMessage();
 				}
 				if (command == 'del') {
 					document.getElementById(message.data).remove();
+				}
+				if (command == 'notify_img') {
+					document.getElementsByClassName('messages')[0].innerHTML += message.data;
 				}
 				command = '';
 			}
@@ -94,19 +103,41 @@
 			}
 		}
 
-		function send() {
-			var input = document.getElementById('sender__message');
-			var message = input.value;
-			input.value = '';
-			ws.send('send');
-			ws.send(message);
+		function sendFile(file) {
+			var file = document.getElementById('sender__file').files[0];
+			var fd = new FormData();
+			fd.append('file', file);
+			$.ajax({
+				url:'/file_upload',
+				type:'post',
+				data:fd,
+				contentType: false,
+				processData: false
+			}).done(function(id) {
+				ws.send('notify_img');
+				ws.send(id);
+			});
 		}
 
-		function delete_message(id) {
+		function send() {
+			var file_input = document.getElementById('sender__file');
+			if (!file_input.value == '') {
+				sendFile(file_input.files[0]);
+			}
+			else {
+				var input = document.getElementById('sender__message');
+				var message = input.value;
+				input.value = '';
+				ws.send('send_mes');
+				ws.send(message);
+			}
+		}
+
+		function deleteMessage(id) {
 			ws.send('del');
 			ws.send(id);
 		}
 
 		window.onload = scrollToLastMessage;
 		connect();
-	</script>
+</script>

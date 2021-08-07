@@ -1,10 +1,12 @@
 import asyncio
 import websockets
 import threading
-from .sock.server import MessageServer
+import os
+
+from django.conf import settings
 
 from django.shortcuts import render
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, FileResponse
 
 from django.urls import reverse_lazy
 from django.shortcuts import redirect
@@ -17,12 +19,18 @@ from django.contrib.auth import get_user, authenticate, login, logout
 from django.contrib.auth.hashers import make_password
 
 from .models import Message
+from .models import MessageData
 from .models import Chat
 
 from .routine import StringHasher
 from .routine import PageBase
 
+from .sock.server import MessageServer
+from .sock.server import ChatServer
 
+
+chat_server = ChatServer()
+message_server = MessageServer()
 
 
 class Authorization(PageBase):
@@ -38,7 +46,7 @@ class Authorization(PageBase):
 
     def handle(self, request: HttpRequest, *params, **args):
         if not get_user(request).is_anonymous:
-            return redirect(reverse_lazy('main'))
+            return redirect(reverse_lazy('messages_page'))
         return super().handle(request, *params, **args)
 
     def post(self, request: HttpRequest, *params, **args):
@@ -48,7 +56,7 @@ class Authorization(PageBase):
             return self.get(request, error)
 
         login(request, user)
-        return self.redirect('main')
+        return self.redirect('messages_page')
 
     def get(self, request: HttpRequest, *params, **args):
         context = {'error': params[0] if not params == () else ''}
@@ -69,7 +77,7 @@ class Registration(PageBase):
 
     def handle(self, request: HttpRequest, *params, **args):
         if not get_user(request).is_anonymous:
-            return redirect(reverse_lazy('main'))
+            return redirect(reverse_lazy('messages_page'))
         return super().handle(request, *params, **args)
 
     def post(self, request, *params, **args):
@@ -81,7 +89,7 @@ class Registration(PageBase):
         print(request.POST)
         user = User.objects.create_user(username=data['username'], password=data['password'], email=data['email'])
         login(request, user)
-        return self.redirect('main')
+        return self.redirect('messages_page')
 
     def get(self, request, *params, **args):
         context = {'error': params[0] if not params == () else ''}
@@ -94,7 +102,7 @@ class MessagesHandler(PageBase):
         if not get_user(request).is_anonymous:
             return super().handle(request, *params, **args)
         else:
-            return redirect(reverse_lazy('main'))
+            return redirect(reverse_lazy('messages_page'))
 
     # User check is in handle function
     def get(self, request, *params, **args):
@@ -121,23 +129,22 @@ class MessagesHandler(PageBase):
 def request_session_id(request):
     return HttpResponse(request.COOKIES.get('sessionid'))
 
-def start_socket(host):
+def start_message_socket(host):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    server = MessageServer()
-
-    start_server = websockets.serve(server.handle, host, 8001)
+    start_server = websockets.serve(message_server.handle, host, 8001)
     loop.run_until_complete(start_server)
-    loop.run_forever()
+    if not loop.is_running():
+        loop.run_forever()
 
 
-class MainPage(PageBase):
+class MessagesPage(PageBase):
     websocket_thread = threading.Thread(target=lambda:print('You must restore this thread to create WebSocket thread'))
 
     def handle(self, request, *params, **args):
         if not self.websocket_thread.is_alive():
-            self.websocket_thread = threading.Thread(target=start_socket, args=(request.get_host().split(':')[0],))
+            self.websocket_thread = threading.Thread(target=start_message_socket, args=(request.get_host().split(':')[0],))
             self.websocket_thread.start()
 
         if not get_user(request).is_anonymous:
@@ -153,29 +160,47 @@ class MainPage(PageBase):
             chat = Chat.objects.all().get(title=chat_title)
         except ObjectDoesNotExist:
             return self.redirect('chats_handler')
-        messages = Message.objects.all().filter(chat=chat)
+        messages = Message.objects.all().filter(chat=chat).order_by('pk')
         context = {'messages': messages}
         return render(request, 'main/index.html', context)
 
 
+def start_chats_socket(host):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    start_server = websockets.serve(chat_server.handle, host, 8002)
+    loop.run_until_complete(start_server)
+
+    if not loop.is_running():
+        loop.run_forever()
+
+
 class ChatsHandler(PageBase):
+    websocket_thread = threading.Thread(target=lambda: print('You must restore this thread to create WebSocket thread'))
+
     def handle(self, request: HttpRequest, *params, **args):
+        if not self.websocket_thread.is_alive():
+            self.websocket_thread = threading.Thread(target=start_chats_socket,
+                                                     args=(request.get_host().split(':')[0],))
+            self.websocket_thread.start()
+
         if not get_user(request).is_anonymous:
             return super().handle(request, *params, **args)
-        return redirect(reverse_lazy('main'))
+        return redirect(reverse_lazy('messages_page'))
 
     def get(self, request: HttpRequest, *params, **args):
         action = request.GET.get('action')
 
         if action == 'exit_chat':
-            return self.redirect('main', {'chat_name': None})
+            return self.redirect('messages_page', {'chat_name': None})
         if action == 'exit':
             logout(request)
-            return self.redirect('main')
+            return self.redirect('messages_page')
 
         if action == 'get_chat':
             chat_redirect = request.GET.get('chat_name')
-            return self.redirect('main', {'chat_name': chat_redirect})
+            return self.redirect('messages_page', {'chat_name': chat_redirect})
 
         if action == 'create_chat':
             return self.redirect('create_chat')
@@ -211,7 +236,7 @@ class ChatsCreator(PageBase):
     def handle(self, request: HttpRequest, *params, **args):
         if not get_user(request).is_anonymous:
             return super().handle(request, *params, **args)
-        return redirect(reverse_lazy('main'))
+        return redirect(reverse_lazy('messages_page'))
 
     def get(self, request: HttpRequest, *params, **args):
         users = self.get_users(request)
@@ -224,9 +249,14 @@ class ChatsCreator(PageBase):
             chat.save()
             chat.users.add(get_user(request))
             users_id = request.POST.getlist('users')
-            for id in users_id:
+            for user_id in users_id:
                 try:
-                    chat.users.add(User.objects.all().get(pk=int(id)))
+                    user = User.objects.all().get(pk=int(user_id))
+                    chat.users.add(user)
+                    for connection in chat_server.connections:
+                        if user == connection.user:
+                            chat_server.chats[chat.title].append(connection)
+
                 except ObjectDoesNotExist:
                     pass
                 except ValueError:
@@ -240,6 +270,33 @@ class UserSettings(PageBase):
         try:
             user = get_user(request)
         except ObjectDoesNotExist:
-            return redirect(reverse_lazy('main'))
+            return redirect(reverse_lazy('messages_page'))
 
         return render(request, 'main/user_settings.html', {'user': user})
+
+
+class FileHandler(PageBase):
+    @csrf_exempt
+    def handle(self, request: HttpRequest, *params, **args):
+        user = get_user(request)
+        if not user or user.is_anonymous:
+            return self.redirect('messages_page')
+        return super().handle(request, *params, **args)
+
+    def post(self, request: HttpRequest, *params, **args):
+        user = get_user(request)
+        file = request.FILES.get('file')
+        if not user or user.is_anonymous:
+            return self.redirect('messages_page')
+        chat = Chat.objects.all().get(title=request.COOKIES.get('chat_name'))
+
+        md = MessageData()
+        md.image.save(file.name, file)
+        message = Message(author=user, chat=chat, data=md, type='image')
+        message.save()
+        return HttpResponse(str(message.id))
+
+    def get(self, request: HttpRequest, *params, **args):
+        user = get_user(request)
+        image = Message.objects.all().get(id=int(request.GET.get('file_id'))).data.image
+        return FileResponse(image.file)
