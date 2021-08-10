@@ -29,10 +29,15 @@ class Message(models.Model):
         s += str(self.date)
         return s
 
+
 class MessageData(models.Model):
     text = models.TextField(null=True, verbose_name='Text')
     image = models.ImageField(null=True, verbose_name='Image')
     id = models.AutoField(primary_key=True, verbose_name='Id')
+
+    def delete(self, *args, **kwargs):
+        self.image.delete()
+        return super().delete(*args, **kwargs)
 
 
 

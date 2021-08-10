@@ -38,14 +38,15 @@ class Authorization(PageBase):
         try:
             user = User.objects.all().get(username=data.get('username'))
             if not user.check_password(data.get('password')):
-                return 'Password incorrect'
+                return 'Incorrect password'
             else:
                 return ''
         except:
             return 'User with this name doesn\'t exist'
 
     def handle(self, request: HttpRequest, *params, **args):
-        if not get_user(request).is_anonymous:
+        user = get_user(request)
+        if user and not user.is_anonymous:
             return redirect(reverse_lazy('messages_page'))
         return super().handle(request, *params, **args)
 
@@ -76,7 +77,8 @@ class Registration(PageBase):
         return ''
 
     def handle(self, request: HttpRequest, *params, **args):
-        if not get_user(request).is_anonymous:
+        user = get_user(request)
+        if user and not user.is_anonymous:
             return redirect(reverse_lazy('messages_page'))
         return super().handle(request, *params, **args)
 
@@ -86,7 +88,6 @@ class Registration(PageBase):
         if not error == '':
             return self.get(request, error)
 
-        print(request.POST)
         user = User.objects.create_user(username=data['username'], password=data['password'], email=data['email'])
         login(request, user)
         return self.redirect('messages_page')
@@ -96,38 +97,9 @@ class Registration(PageBase):
         return render(request, 'main/signup.html', context)
 
 
-class MessagesHandler(PageBase):
-    @csrf_exempt
-    def handle(self, request, *params, **args):
-        if not get_user(request).is_anonymous:
-            return super().handle(request, *params, **args)
-        else:
-            return redirect(reverse_lazy('messages_page'))
-
-    # User check is in handle function
-    def get(self, request, *params, **args):
-        try:
-            message_id = request.GET.get('message_id')
-            message_id = int(message_id)
-            user = get_user(request)
-            chat = Chat.objects.all().get(title=request.COOKIES.get('chat_name'))
-            if not chat.users.get(username=user.username) == user:
-                return HttpResponse('')
-        except:
-            return HttpResponse('')
-
-        if message_id == -1:
-            return render(request, 'main/messages.html', {'messages': Message.objects.all().filter(chat=chat).order_by('pk')})
-
-        new_messages = []
-        for message in Message.objects.all().filter(chat=chat).order_by('pk'):
-            if message.pk > message_id:
-                new_messages.append(message)
-        return render(request, 'main/messages.html', {'messages': new_messages, 'user': user})
-
-
 def request_session_id(request):
     return HttpResponse(request.COOKIES.get('sessionid'))
+
 
 def start_message_socket(host):
     loop = asyncio.new_event_loop()
@@ -147,21 +119,23 @@ class MessagesPage(PageBase):
             self.websocket_thread = threading.Thread(target=start_message_socket, args=(request.get_host().split(':')[0],))
             self.websocket_thread.start()
 
-        if not get_user(request).is_anonymous:
+        user = get_user(request)
+        if user and not user.is_anonymous:
+            args['user'] = user
             return super().handle(request, *params, **args)
+
         return self.redirect('login')
 
     def get(self, request, *params, **args):
         chat_title = request.COOKIES.get('chat_name')
-        if chat_title is None:
+        if not chat_title:
             return self.redirect('chats_handler')
-
         try:
             chat = Chat.objects.all().get(title=chat_title)
         except ObjectDoesNotExist:
             return self.redirect('chats_handler')
         messages = Message.objects.all().filter(chat=chat).order_by('pk')
-        context = {'messages': messages}
+        context = {'messages': messages, 'user': args['user']}
         return render(request, 'main/index.html', context)
 
 
@@ -185,7 +159,8 @@ class ChatsHandler(PageBase):
                                                      args=(request.get_host().split(':')[0],))
             self.websocket_thread.start()
 
-        if not get_user(request).is_anonymous:
+        user = get_user(request)
+        if user and not user.is_anonymous:
             return super().handle(request, *params, **args)
         return redirect(reverse_lazy('messages_page'))
 
@@ -194,6 +169,7 @@ class ChatsHandler(PageBase):
 
         if action == 'exit_chat':
             return self.redirect('messages_page', {'chat_name': None})
+
         if action == 'exit':
             logout(request)
             return self.redirect('messages_page')
@@ -216,18 +192,19 @@ class ChatsHandler(PageBase):
             context = {'displays': display}
             return render(request, 'main/chats.html', context)
 
-        if action == 'exit':
-            return self.redirect('chats_handler', {'chat_name': None})
-
         return HttpResponse('')
 
 
 class ChatsCreator(PageBase):
     @staticmethod
     def check_chat(request):
+        data = request.POST
+        if len(Chat.objects.all().filter(title=data['title'])) > 0:
+            return False
         return True
 
-    def get_users(self, request):
+    @staticmethod
+    def get_users_to_invite(request):
         now_user = get_user(request)
         users = list(User.objects.all())
         users.remove(now_user)
@@ -239,7 +216,7 @@ class ChatsCreator(PageBase):
         return redirect(reverse_lazy('messages_page'))
 
     def get(self, request: HttpRequest, *params, **args):
-        users = self.get_users(request)
+        users = ChatsCreator.get_users_to_invite(request)
         return render(request, 'main/chat_create.html', {'users': users})
 
     def post(self, request: HttpRequest, *params, **args):
@@ -279,24 +256,23 @@ class FileHandler(PageBase):
     @csrf_exempt
     def handle(self, request: HttpRequest, *params, **args):
         user = get_user(request)
-        if not user or user.is_anonymous:
+        chat = Chat.objects.all().get(title=request.COOKIES.get('chat_name'))
+        if (not user) or (user.is_anonymous) or (chat not in Chat.objects.all().filter(users=user)):
             return self.redirect('messages_page')
+        args['user'] = user
+        args['chat'] = chat
         return super().handle(request, *params, **args)
 
     def post(self, request: HttpRequest, *params, **args):
-        user = get_user(request)
         file = request.FILES.get('file')
-        if not user or user.is_anonymous:
-            return self.redirect('messages_page')
-        chat = Chat.objects.all().get(title=request.COOKIES.get('chat_name'))
 
         md = MessageData()
         md.image.save(file.name, file)
-        message = Message(author=user, chat=chat, data=md, type='image')
+        message = Message(author=args['user'], chat=args['chat'], data=md, type='image')
         message.save()
-        return HttpResponse(str(message.id))
+        asyncio.run(message_server.notify_img(args['user'], args['chat'], message.id))
+        return HttpResponse('')
 
     def get(self, request: HttpRequest, *params, **args):
-        user = get_user(request)
         image = Message.objects.all().get(id=int(request.GET.get('file_id'))).data.image
         return FileResponse(image.file)

@@ -62,7 +62,7 @@
 			chat_id = '';
 		}
 		ws.onopen = function() {
-			data = $.get('get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data); });
+			data = $.get('/get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data); });
 		}
 	}
 

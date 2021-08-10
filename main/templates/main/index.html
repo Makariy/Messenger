@@ -46,7 +46,18 @@
 						<button onclick="send()" class="sender__send">
 							<img src="{% static 'main/send button.svg' %}">
 						</button>
-						<input type="file" id="sender__file" placeholder="Image">
+						<span class="sender__file">
+							<button class="sender__file-button" onclick='openFileSearch()'>
+								<img src="{% static 'main/clip.png' %}" class="sender__file-img">
+							</button>
+							<input style="display: none" type="file" id="sender__file-input">	
+						</span>
+						<div class="sender__file-show">
+							<p id="sender__file-show--file"></p>
+							<button id="sender__file-show--button" onclick="removeChosenFile()">
+								<img src="{% static 'main/cross.svg' %}" alt="" id="sender__file-show--button-img">
+							</button>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -59,6 +70,7 @@
 <script>
 		var ws = null;
 		var command = '';
+		var checking_open_file = null;
 
 		function getLastMessage() {
 			var messages = document.getElementsByClassName("message");
@@ -78,6 +90,28 @@
    				$('.sender__send').click();
 			}
 		})
+
+		function openFileSearch() {
+			document.getElementById('sender__file-input').click();
+			checking_open_file = window.setInterval(showChosenFile, 200);
+		}
+
+		function showChosenFile() {
+			var file_input = document.getElementById('sender__file-input');
+			if (file_input.files[0]) {
+				window.clearInterval(checking_open_file);
+				checking_open_file = null;
+				document.getElementById('sender__file-show--file').innerHTML = file_input.files[0].name;
+				document.getElementById('sender__file-show--button').style['display'] = 'block';
+			}
+		}
+
+		function removeChosenFile() {
+			document.getElementById('sender__file-show--file').innerHTML = '';
+			document.getElementById('sender__file-input').value = '';
+				document.getElementById('sender__file-show--button').style['display'] = 'none';
+
+		}
 
 		function connect() {
 			ws = new WebSocket('ws://' + window.location.hostname + ':8001');
@@ -99,34 +133,33 @@
 				command = '';
 			}
 			ws.onopen = function() {
-				data = $.get('get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data); });
+				data = $.get('/get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data); });
 			}
 		}
 
 		function sendFile(file) {
-			var file = document.getElementById('sender__file').files[0];
+			var input = document.getElementById('sender__file-input');
 			var fd = new FormData();
-			fd.append('file', file);
+			fd.append('file', input.files[0]);
 			$.ajax({
-				url:'/file_upload',
+				url:'/file_upload/',
 				type:'post',
 				data:fd,
 				contentType: false,
 				processData: false
-			}).done(function(id) {
-				ws.send('notify_img');
-				ws.send(id);
 			});
+			input.value = '';
 		}
 
 		function send() {
-			var file_input = document.getElementById('sender__file');
+			var file_input = document.getElementById('sender__file-input');
 			if (!file_input.value == '') {
 				sendFile(file_input.files[0]);
 			}
 			else {
 				var input = document.getElementById('sender__message');
 				var message = input.value;
+				if (message == '') {return;} 
 				input.value = '';
 				ws.send('send_mes');
 				ws.send(message);

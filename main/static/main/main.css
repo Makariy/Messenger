@@ -8,6 +8,11 @@ a {
     outline: none;
     color: black;
 }
+button {
+	background-color: transparent;
+	outline: none;
+	border:  none;
+}
 
 .messanger {
 	height: 80vh;
@@ -55,16 +60,71 @@ a {
 
 #sender__message {
 	padding: 10px 0 10px 10px;
-	width: 25%;
+	width: 30%;
 	height: 100%;
+	border-radius: 10px;
+	outline: none;
 }
 
 .sender__send {
+	border-radius: 50%;
+	height:  35px;
+	width: 35px;
+	margin-left: 5px;
+	cursor: pointer;
+	transition: 0.3s;
+}
+.sender__send:hover {
+	background-color: lightgrey;
+}
+.sender__file-img {
+	width: 100%;
+	height: 100%;
+}
+
+.sender__file {
+	position: relative;
+	cursor: pointer;
+	overflow: hidden;
+	transition: 0.3s;
+	border-radius: 50%;
+	padding: 7px;
+	height: 30px;
+	width: 30px;
+}
+.sender__file:hover {
+	background-color: lightgrey;
+}
+.sender__file-button {
+	width: 100%;
+	height: 100%;
+	padding: 0;
+	border: none;
 	background-color: transparent;
-	border: 1px solid grey;
+}
+
+.sender__file-show {
+	display: flex;
+}
+
+#sender__file-show--button  {
+	display: none;
+	cursor: pointer;
+}
+#sender__file-show--button-img {
+	height: 35px;
+	width: 35px;
+}
+
+#sender__file-input {
+	position: absolute;
 	outline: none;
-	height:  100%;
-	margin-left: 25px;
+	width: 100%;
+	height: 100%;
+	opacity: 0;
+	top: 0;
+	left: 0;
+	cursor: pointer;
 }
 
 .message {
@@ -77,6 +137,12 @@ a {
     left: auto;
     right: 0;
 }
+
+.message__image {
+	max-height: 500px;
+	max-width:  500px;
+}
+
 
 .chat__title {
     font-size: 22px;

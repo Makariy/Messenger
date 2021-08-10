@@ -1,5 +1,6 @@
 import asyncio
 import websockets
+from websockets.exceptions import ConnectionClosedOK
 
 from django.http.cookie import parse_cookie
 from django.template import loader
@@ -8,6 +9,7 @@ from django.contrib.auth.models import User
 from django.contrib.sessions.models import Session
 from ..models import Chat, Message, MessageData
 from ..routine import StringHasher
+
 
 
 class Connection:
@@ -30,91 +32,117 @@ async def get_user(session_id):
 
 
 class MessageServer():
-	chats = {}
-	connections = {}
+	chats = {}		# Contains as a key all chats that are being monitored
+					# and connections as their values
+
+	class RegistrationError(Exception):
+		def __init__(self, message):
+			self.message = message
+		def __str__(self):
+			return str(self.message)
+
 
 	def __init__(self):
+		# Before any actions a websocket recieves a command to activate
+		# the right function to handle the next request
 		self.commands = {
 			'send_mes': self.send_message,
 			'del': self.delete,
-			'notify_img': self.notify_img,
 		}
 
 	async def register(self, websocket):
-		cookies = parse_cookie(await websocket.recv())
+		'''
+			Adds websocket to monitoring chats and active connections
+		'''
+		try:
+			cookies = parse_cookie(await websocket.recv())
 
-		user = await get_user(cookies['sessionid'])
-		chat = await run_sync(lambda: Chat.objects.all().get(title=cookies.get('chat_name')))
+			user = await get_user(cookies['sessionid'])
+			chat = await run_sync(lambda: Chat.objects.all().get(title=cookies.get('chat_name')))
+			chats = await run_sync(lambda: tuple(Chat.objects.all().filter(users__username=user.username)))
 
-		chats = await run_sync(lambda: tuple(Chat.objects.all().filter(users__username=user.username)))
+			# Add user to correct chat query
+			if chat in chats:
+				connection = Connection(user=user, socket=websocket)
+				if not self.chats.get(chat.title):
+					self.chats[chat.title] = [connection,]
+				else:
+					self.chats[chat.title].append(connection)
 
-		# Add user to correct chat query
-		if chat in chats:
-			connection = Connection(user=user, socket=websocket)
-			if not self.chats.get(chat.title):
-				self.chats[chat.title] = [connection,]
-			else:
-				self.chats[chat.title].append(connection)
+				return connection, chat
+		except:
+			raise self.RegistrationError('Unknown error during registration')
 
-			self.connections[websocket] = (connection, chat)
-			return True
-
-		return False
-
-	async def unregister(self, websocket):
-		if self.connections.get(websocket):
-			connection, chat = self.connections[websocket]
+	async def unregister(self, connection, chat):
+		'''
+			Unregister websocket from chat query and active connections
+		'''
+		if chat:
 			self.chats[chat.title].remove(connection)
-		await websocket.close()
+		if connection:
+			await connection.socket.close()
 
 	async def _send_message(self, connection, message):
 		template = loader.get_template('main/messages.html')
 		await connection.socket.send('send_mes')
 		await connection.socket.send(str(template.render({'messages': [message], 'user': connection.user})))
 
-	async def send_message(self, sock, chat, text):
+	async def send_message(self, connection, chat, text):
 		data = MessageData(text=text)
 		await run_sync(data.save)
 
-		message = Message(author=sock.user, chat=chat, data=data, type='text')
+		message = Message(author=connection.user, chat=chat, data=data, type='text')
 		await run_sync(message.save)
 
-		for connection in self.chats[chat.title]:
-			await self._send_message(connection, message)
+		for conn in self.chats[chat.title]:
+			await self._send_message(conn, message)
 
-	async def delete(self, connection, chat, text):
+	async def delete(self, connection, chat, chat_id):
+		'''
+			Deletes message from chat with stated chat_id
+		'''
 		try:
-			message = await run_sync(lambda: Message.objects.all().get(id=int(text)))
+			message = await run_sync(lambda: Message.objects.all().get(id=int(chat_id)))
 			if await run_sync(lambda: connection.user == message.author):
-				await run_sync(lambda: message.delete())
+				await run_sync(message.delete)
 				for _connection in self.chats[chat.title]:
 					await _connection.socket.send('del')
-					await _connection.socket.send(text)
+					await _connection.socket.send(chat_id)
 		except:
 			pass
 
-	async def notify_img(self, connection, chat, id):
-		for conn in self.chats[chat.title]:
-			await conn.socket.send('notify_img')
-			template = loader.get_template('main/messages.html')
-			message = await run_sync(lambda: Message.objects.all().get(id=str(id)))
-			html_img = await run_sync(lambda: template.render({'messages': [message], 'user': connection.user}))
-			await conn.socket.send(str(html_img))
-
 	async def handle(self, websocket, path):
+		'''
+			Resiters user and handles his commands. Finally closes the connection
+		'''
+		connection = None
+		chat = None
 		try:
-			if not await self.register(websocket):
-				raise Exception()
-			connection, chat = self.connections[websocket]
+			connection, chat = await self.register(websocket)
+
 			while True:
 				command = await websocket.recv()
 				func = self.commands.get(command)
 				if func:
 					await func(connection, chat, await websocket.recv())
+		except ConnectionClosedOK:
+			pass
 		except:
 			pass
 		finally:
-			await self.unregister(websocket)
+			await self.unregister(connection, chat)
+
+	async def notify_img(self, user, chat, file_id):
+		'''
+			Function is being called from FileHandler.
+			Notifies every user in stated chat about new file
+		'''
+		for conn in self.chats[chat.title]:
+			await conn.socket.send('notify_img')
+			template = loader.get_template('main/messages.html')
+			message = await run_sync(lambda: Message.objects.all().get(id=str(file_id)))
+			html_img = await run_sync(lambda: template.render({'messages': [message], 'user': user}))
+			await conn.socket.send(str(html_img))
 
 
 class ChatServer:
@@ -179,6 +207,7 @@ class ChatServer:
 			await asyncio.sleep(1)
 
 	async def handle(self, websocket, path):
+		connection = None
 		try:
 			connection = await self.register(websocket)
 			if not self.is_monitoring:
