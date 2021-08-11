@@ -37,45 +37,63 @@ button {
 }
 
 .messages {
-	height: 80%;
+	height: 100%;
+	width: 100%;
 	overflow-y: scroll;
 	display: flex;
 	flex-direction: column;
+	padding-right: 20px;
+	margin-bottom: 10px;
+}
+.messages::-webkit-scrollbar {
+	width: 10px;
+}
+.messages::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+.messages::-webkit-scrollbar-thumb {
+  background: lightgrey;
+  border-radius: 10px;
 }
 
 .sender {
 	border-top: 2px solid #004DFF;
+	padding: 15px 10px;
 	display: flex;
-	align-items: center;
-	height: 20%;
+    justify-content: center;
+    flex-direction: column;
 	width: 100%;
+	height: auto;
 }
 
 .sender__form {
-	margin-left: 10%;
 	width: 100%;
 	display: flex;
 	align-items: center;
 }
 
 #sender__message {
-	padding: 10px 0 10px 10px;
-	width: 30%;
+	padding-left: 10px;
+	width: 100%;
 	height: 100%;
+	border: lightgrey 3px solid;
 	border-radius: 10px;
 	outline: none;
 }
 
 .sender__send {
 	border-radius: 50%;
-	height:  35px;
-	width: 35px;
-	margin-left: 5px;
+	padding: 5px;
+    margin-left: 15px;
 	cursor: pointer;
 	transition: 0.3s;
 }
 .sender__send:hover {
 	background-color: lightgrey;
+}
+.sender__send img {
+	width: 100%;
+	height: 100%;
 }
 .sender__file-img {
 	width: 100%;
@@ -90,7 +108,7 @@ button {
 	border-radius: 50%;
 	padding: 7px;
 	height: 30px;
-	width: 30px;
+	margin-right: 5px;
 }
 .sender__file:hover {
 	background-color: lightgrey;
@@ -103,8 +121,9 @@ button {
 	background-color: transparent;
 }
 
-.sender__file-show {
-	display: flex;
+#sender__file-show {
+	display: none;
+	color: #004DFF;
 }
 
 #sender__file-show--button  {
@@ -112,8 +131,7 @@ button {
 	cursor: pointer;
 }
 #sender__file-show--button-img {
-	height: 35px;
-	width: 35px;
+	height: 20px;
 }
 
 #sender__file-input {

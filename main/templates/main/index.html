@@ -42,22 +42,22 @@
 				</div>
 				<div class="sender">
 					<div class="sender__form">
-						<input type="text" id="sender__message" placeholder="Enter some message...">
-						<button onclick="send()" class="sender__send">
-							<img src="{% static 'main/send button.svg' %}">
-						</button>
 						<span class="sender__file">
 							<button class="sender__file-button" onclick='openFileSearch()'>
 								<img src="{% static 'main/clip.png' %}" class="sender__file-img">
 							</button>
-							<input style="display: none" type="file" id="sender__file-input">	
+							<input style="display: none" type="file" id="sender__file-input">
 						</span>
-						<div class="sender__file-show">
-							<p id="sender__file-show--file"></p>
-							<button id="sender__file-show--button" onclick="removeChosenFile()">
-								<img src="{% static 'main/cross.svg' %}" alt="" id="sender__file-show--button-img">
-							</button>
-						</div>
+						<input type="text" id="sender__message" placeholder="Enter some message...">
+						<button onclick="send()" class="sender__send">
+							<img src="{% static 'main/send button.svg' %}">
+						</button>
+					</div>
+					<div id="sender__file-show">
+						<p id="sender__file-show--file"></p>
+						<button id="sender__file-show--button" onclick="removeChosenFile()">
+							<img src="{% static 'main/cross.svg' %}" alt="" id="sender__file-show--button-img">
+						</button>
 					</div>
 				</div>
 			</div>
@@ -99,17 +99,22 @@
 		function showChosenFile() {
 			var file_input = document.getElementById('sender__file-input');
 			if (file_input.files[0]) {
+				if (!file_input.files[0].name.endsWith('.jpg') && !file_input.files[0].name.endsWith('.png')) 
+					{ ; file_input.value = '' ;return; }
 				window.clearInterval(checking_open_file);
 				checking_open_file = null;
+				document.getElementById('sender__file-show').style['display'] = 'flex';
 				document.getElementById('sender__file-show--file').innerHTML = file_input.files[0].name;
 				document.getElementById('sender__file-show--button').style['display'] = 'block';
+
 			}
 		}
 
 		function removeChosenFile() {
-			document.getElementById('sender__file-show--file').innerHTML = '';
 			document.getElementById('sender__file-input').value = '';
-				document.getElementById('sender__file-show--button').style['display'] = 'none';
+			document.getElementById('sender__file-show').style['display'] = 'none';
+			document.getElementById('sender__file-show--file').innerHTML = '';
+			document.getElementById('sender__file-show--button').style['display'] = 'none';
 
 		}
 
@@ -129,6 +134,7 @@
 				}
 				if (command == 'notify_img') {
 					document.getElementsByClassName('messages')[0].innerHTML += message.data;
+					scrollToLastMessage();
 				}
 				command = '';
 			}
@@ -148,7 +154,7 @@
 				contentType: false,
 				processData: false
 			});
-			input.value = '';
+			removeChosenFile();
 		}
 
 		function send() {
