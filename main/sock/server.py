@@ -141,7 +141,7 @@ class MessageServer():
 			await conn.socket.send('notify_img')
 			template = loader.get_template('main/messages.html')
 			message = await run_sync(lambda: Message.objects.all().get(id=str(file_id)))
-			html_img = await run_sync(lambda: template.render({'messages': [message], 'user': user}))
+			html_img = await run_sync(lambda: template.render({'messages': [message], 'user': conn.user}))
 			await conn.socket.send(str(html_img))
 
 
