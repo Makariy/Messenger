@@ -6,6 +6,7 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Messanger</title>
 	<link rel="stylesheet" href="{% static 'main/main.css' %}">
+	<link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,700;1,500&display=swap" rel="stylesheet">
 </head>
 <body>
 	<div class="menu">
@@ -22,161 +23,169 @@
 		<div class="container">
 			<div class="message-window">
 				<div class="messages">
-					{% for message in messages %}
-					<div class="message" id="{{ message.pk }}">
-					  {% if message.type == 'text' %}
-					  <h4 class="message__author">{{ message.author.username }}</h4>
-					  <p class="message__inner">{{ message.data.text }}</p>
-					  {% endif %}
-					  {% if message.type == 'image' %}
-					  <h4 class="message__author">{{ message.author.username }}</h4>
-					  <img src="/file_upload?file_id={{ message.id }}" class="message__inner message__image">
-					  {% endif %}
-					  <div class="message__actions">
-						{% if user == message.author %}
-						<button class="message__actions-delete" onclick="deleteMessage({{ message.pk }})">Delete</button>
-						{% endif %}
-					  </div>
+					<div class="messages_list">
+						{% for message in messages %}
+						<div class="message" id="{{ message.pk }}">
+							{% if message.type == 'text' %}
+							<h4 class="message__author">{{ message.author.username }}</h4>
+							<p class="message__inner">{{ message.data.text }}</p>
+							{% endif %}
+							{% if message.type == 'image' %}
+							<h4 class="message__author">{{ message.author.username }}</h4>
+							<img src="/file_upload?file_id={{ message.id }}" class="message__inner message__image">
+							{% endif %}
+							<div class="message__actions">
+								{% if user == message.author %}
+								<button class="message__actions-delete" onclick="deleteMessage({{ message.pk }})">Delete</button>
+								{% endif %}
+							</div>
+						</div>
+						{% endfor %}
 					</div>
-					{% endfor %}
 				</div>
 				<div class="sender">
-					<div class="sender__form">
-						<span class="sender__file">
-							<button class="sender__file-button" onclick='openFileSearch()'>
-								<img src="{% static 'main/clip.png' %}" class="sender__file-img">
+					<div class="sender__inner">
+						<div class="sender__inner_form">
+							<span class="sender__inner_file">
+								<button class="sender__inner_file-button" onclick='openFileSearch()'>
+									<img src="{% static 'main/clip.png' %}" class="sender__inner_file-img">
+								</button>
+								<input style="display: none" type="file" id="sender__inner_file-input">
+							</span>
+							<div class="sender__inner_input">
+								<input type="text" id="sender__inner_input_message" placeholder="Enter some message...">
+							</div>
+							<div class="sender__inner_send">
+								<button onclick="send()" class="sender__inner_send_button">
+									<img src="{% static 'main/send button.svg' %}">
+								<buttton>
+							</div>
+						</div>
+						<div id="sender__inner_file-show">
+							<p id="sender__inner_file-show--file"></p>
+							<button id="sender__inner_file-show--button" onclick="removeChosenFile()">
+								<img src="{% static 'main/cross.svg' %}" alt="" id="sender__inner_file-show--button-img">
 							</button>
-							<input style="display: none" type="file" id="sender__file-input">
-						</span>
-						<input type="text" id="sender__message" placeholder="Enter some message...">
-						<button onclick="send()" class="sender__send">
-							<img src="{% static 'main/send button.svg' %}">
-						</button>
-					</div>
-					<div id="sender__file-show">
-						<p id="sender__file-show--file"></p>
-						<button id="sender__file-show--button" onclick="removeChosenFile()">
-							<img src="{% static 'main/cross.svg' %}" alt="" id="sender__file-show--button-img">
-						</button>
+						</div>
 					</div>
 				</div>
 			</div>
 		</div>
 	</section>
 </body>
-	<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
 </html>
 
 <script>
-		var ws = null;
-		var command = '';
-		var checking_open_file = null;
+	var ws = null;
+	var command = '';
+	var checking_open_file = null;
 
-		function getLastMessage() {
-			var messages = document.getElementsByClassName("message");
-			if (messages)
-				return messages[messages.length-1];
-			return null;
+	function getLastMessage() {
+		var messages = document.getElementsByClassName("message");
+		if (messages)
+			return messages[messages.length-1];
+		return null;
+	}
+
+	function scrollToLastMessage() {
+		var last = getLastMessage();
+		if (last)
+			last.scrollIntoView();
+	}
+
+	$('#sender__inner_input_message').keyup(function(event) {
+		if (event.keyCode == 13) {
+			$('.sender__inner_send_button').click();
 		}
+	})
 
-		function scrollToLastMessage() {
-			var last = getLastMessage();
-			if (last)
-				last.scrollIntoView();
+	function openFileSearch() {
+		document.getElementById('sender__inner_file-input').click();
+		checking_open_file = window.setInterval(showChosenFile, 200);
+	}
+
+	function showChosenFile() {
+		var file_input = document.getElementById('sender__inner_file-input');
+		if (file_input.files[0]) {
+			if (!file_input.files[0].name.endsWith('.jpg') && !file_input.files[0].name.endsWith('.png')) 
+				{ ; file_input.value = '' ;return; }
+			window.clearInterval(checking_open_file);
+			checking_open_file = null;
+			document.getElementById('sender__inner_file-show').style['display'] = 'flex';
+			document.getElementById('sender__inner_file-show--file').innerHTML = file_input.files[0].name;
+			document.getElementById('sender__inner_file-show--button').style['display'] = 'block';
+
 		}
+	}
 
-		$('#sender__message').keyup(function(event) {
-			if (event.keyCode == 13) {
-   				$('.sender__send').click();
+	function removeChosenFile() {
+		document.getElementById('sender__inner_file-input').value = '';
+		document.getElementById('sender__inner_file-show').style['display'] = 'none';
+		document.getElementById('sender__inner_file-show--file').innerHTML = '';
+		document.getElementById('sender__inner_file-show--button').style['display'] = 'none';
+
+	}
+
+	function connect() {
+		ws = new WebSocket('ws://' + window.location.hostname + ':8001');
+		ws.onmessage = function(message) {
+			if (command == '') {
+				command = message.data;
+				return;
 			}
-		})
-
-		function openFileSearch() {
-			document.getElementById('sender__file-input').click();
-			checking_open_file = window.setInterval(showChosenFile, 200);
-		}
-
-		function showChosenFile() {
-			var file_input = document.getElementById('sender__file-input');
-			if (file_input.files[0]) {
-				if (!file_input.files[0].name.endsWith('.jpg') && !file_input.files[0].name.endsWith('.png')) 
-					{ ; file_input.value = '' ;return; }
-				window.clearInterval(checking_open_file);
-				checking_open_file = null;
-				document.getElementById('sender__file-show').style['display'] = 'flex';
-				document.getElementById('sender__file-show--file').innerHTML = file_input.files[0].name;
-				document.getElementById('sender__file-show--button').style['display'] = 'block';
-
+			if (command == 'send_mes') {
+				$('.messages')[0].innerHTML +=  message.data;
+				scrollToLastMessage();
 			}
-		}
-
-		function removeChosenFile() {
-			document.getElementById('sender__file-input').value = '';
-			document.getElementById('sender__file-show').style['display'] = 'none';
-			document.getElementById('sender__file-show--file').innerHTML = '';
-			document.getElementById('sender__file-show--button').style['display'] = 'none';
-
-		}
-
-		function connect() {
-			ws = new WebSocket('ws://' + window.location.hostname + ':8001');
-			ws.onmessage = function(message) {
-				if (command == '') {
-					command = message.data;
-					return;
-				}
-				if (command == 'send_mes') {
-					$('.messages')[0].innerHTML +=  message.data;
-					scrollToLastMessage();
-				}
-				if (command == 'del') {
-					document.getElementById(message.data).remove();
-				}
-				if (command == 'notify_img') {
-					document.getElementsByClassName('messages')[0].innerHTML += message.data;
-					scrollToLastMessage();
-				}
-				command = '';
+			if (command == 'del') {
+				document.getElementById(message.data).remove();
 			}
-			ws.onopen = function() {
-				data = $.get('/get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data); });
+			if (command == 'notify_img') {
+				document.getElementsByClassName('messages')[0].innerHTML += message.data;
+				scrollToLastMessage();
 			}
+			command = '';
 		}
-
-		function sendFile(file) {
-			var input = document.getElementById('sender__file-input');
-			var fd = new FormData();
-			fd.append('file', input.files[0]);
-			$.ajax({
-				url:'/file_upload/',
-				type:'post',
-				data:fd,
-				contentType: false,
-				processData: false
-			});
-			removeChosenFile();
+		ws.onopen = function() {
+			data = $.get('/get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data); });
 		}
+	}
 
-		function send() {
-			var file_input = document.getElementById('sender__file-input');
-			if (!file_input.value == '') {
-				sendFile(file_input.files[0]);
-			}
-			else {
-				var input = document.getElementById('sender__message');
-				var message = input.value;
-				if (message == '') {return;} 
-				input.value = '';
-				ws.send('send_mes');
-				ws.send(message);
-			}
+	function sendFile(file) {
+		var input = document.getElementById('sender__inner_file-input');
+		var fd = new FormData();
+		fd.append('file', input.files[0]);
+		$.ajax({
+			url:'/file_upload/',
+			type:'post',
+			data:fd,
+			contentType: false,
+			processData: false
+		});
+		removeChosenFile();
+	}
+
+	function send() {
+		var file_input = document.getElementById('sender__inner_file-input');
+		if (!file_input.value == '') {
+			sendFile(file_input.files[0]);
 		}
-
-		function deleteMessage(id) {
-			ws.send('del');
-			ws.send(id);
+		else {
+			var input = document.getElementById('sender__inner_input_message');
+			var message = input.value;
+			if (message == '') {return;} 
+			input.value = '';
+			ws.send('send_mes');
+			ws.send(message);
 		}
+	}
 
-		window.onload = scrollToLastMessage;
-		connect();
+	function deleteMessage(id) {
+		ws.send('del');
+		ws.send(id);
+	}
+
+	window.onload = scrollToLastMessage;
+	connect();
 </script>
