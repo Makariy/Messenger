@@ -173,6 +173,15 @@ button {
 }
 
 
+
+
+
+.chats-window {
+    border: 3px solid #4380e6;
+    border-radius: 10px;
+    height: 80vh;
+}
+
 .chat__title {
     font-size: 22px;
     margin: 16px 0;
@@ -182,7 +191,8 @@ button {
     margin: 0;
 }
 
-.chat__create-link {
+.chat__create {
+	width: fit-content;
     font-size: 24px;
     font-weight: 700;
     color: #4380e6;

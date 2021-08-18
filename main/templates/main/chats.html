@@ -16,13 +16,13 @@
 				<a href="{% url 'chats_handler' %}?action=exit" class="exit__button">Exit account</a>
 		</div>
 	</div>
-	<section class="messanger">
+	<section class="chats-section">
 		<div class="container">
-			<div class="message-window">
+			<div class="chats-window">
 				<div class="chat__create">
 					<a href="{% url 'chats_handler' %}?action=create_chat" class="chat__create-link">Create new chat</a>
 				</div>
-				<div class="messages">
+				<div class="chats">
 					{% for display in displays %}
 					<a href="{% url 'chats_handler' %}?action=get_chat&chat_name={{ display.0.title }}">
 						<div class="chat" id="{{ display.0.pk }}">

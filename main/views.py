@@ -106,7 +106,7 @@ def start_message_socket(host):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    start_server = websockets.serve(message_server.handle, host, 8001)
+    start_server = websockets.serve(message_server.handle, '0.0.0.0', 8001)
     loop.run_until_complete(start_server)
     if not loop.is_running():
         loop.run_forever()
@@ -144,7 +144,7 @@ def start_chats_socket(host):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    start_server = websockets.serve(chat_server.handle, host, 8002)
+    start_server = websockets.serve(chat_server.handle, '0.0.0.0', 8002)
     loop.run_until_complete(start_server)
 
     if not loop.is_running():
