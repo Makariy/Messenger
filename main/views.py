@@ -202,6 +202,9 @@ class ChatsCreator(PageBase):
         data = request.POST
         if len(Chat.objects.all().filter(title=data['title'])) > 0:
             return False
+        if len(data['title']) < 2:
+            return False
+
         return True
 
     @staticmethod
@@ -226,14 +229,11 @@ class ChatsCreator(PageBase):
             chat.title = request.POST.get('title')
             chat.save()
             chat.users.add(get_user(request))
-            users_id = request.POST.getlist('users')
+            users_id = request.POST.getlist('users[]')
             for user_id in users_id:
                 try:
-                    user = User.objects.all().get(pk=int(user_id))
+                    user = User.objects.all().get(id=int(user_id))
                     chat.users.add(user)
-                    for connection in chat_server.connections:
-                        if user == connection.user:
-                            chat_server.chats[chat.title].append(connection)
 
                 except ObjectDoesNotExist:
                     pass
@@ -277,3 +277,40 @@ class FileHandler(PageBase):
     def get(self, request: HttpRequest, *params, **args):
         image = Message.objects.all().get(id=int(request.GET.get('file_id'))).data.image
         return FileResponse(image.file)
+
+
+class ChatSettings(PageBase):
+    def handle(self, request: HttpRequest, *params, **args):
+        user = get_user(request)
+        chat_title = request.COOKIES.get('chat_name')
+        try:
+            chat = Chat.objects.all().get(title=chat_title)
+        except ObjectDoesNotExist:
+            chat = None
+        if user and not user.is_anonymous and chat:
+            if user in chat.users.all():
+                args['user'] = user
+                args['chat'] = chat
+                return super().handle(request, *params, **args)
+        return self.redirect('messages_page')
+
+    def get(self, request: HttpRequest, *params, **args):
+        users = ChatsCreator.get_users_to_invite(request)
+        users_to_invite = ''
+        for user in args['chat'].users.all():
+            if not user.id == args['user'].id:
+                users_to_invite += str(user.id) + ', '
+        context = {'users': users, 'users_to_invite': users_to_invite, 'chat_name': args['chat'].title}
+        return render(request, 'main/chat_settings.html', context)
+
+    def post(self, request: HttpRequest, *params, **args):
+        users_ids = request.POST.getlist('users[]')
+        args['chat'].title = request.POST.get('title')
+        if users_ids:
+            for user_id in users_ids:
+                try:
+                    args['chat'].users.add(User.objects.all().get(id=user_id))
+                except ObjectDoesNotExist:
+                    pass
+        args['chat'].save()
+        return self.redirect('messages_page', {'chat_name': request.POST.get('title')})

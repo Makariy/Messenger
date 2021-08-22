@@ -3,9 +3,9 @@
 <html>
 <head>
     <title>Create chat</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="{% static 'main/login.css' %}">
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 </head>
 <body>
     <section class="login">
@@ -26,16 +26,16 @@
                 </h1>
                 <div class="login__fields">
                     <div id="csrf_token" style="display: none;">
-                        {% csrf_token %}                    
+                        {% csrf_token %}
                     </div>
-                    <input type="text" name="title" required class="form__title" placeholder="Chat name" id="id_name">
+                    <input type="text" name="title" value="{{ chat_name }}" required class="form__title" placeholder="Chat name" id="id_name">
                     <ul class="form__select">
                         {% for user in users %}
                         <li class="form__select_option">
                             <button onclick="handleOption('{{ user.id }}')" class="form__select_option-button" >
                                 <div class="form__select_option-button--trigger" id="form__select_option-button--trigger-{{ user.id }}"></div>
                                 <p class="form__select_option-option">{{ user.username }}</p>
-                            </button>    
+                            </button>
                         </li>
                         {% endfor %}
                     </ul>
@@ -50,7 +50,7 @@
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
     <script>
 
-        var users_to_add = [];
+        var users_to_add = [{{ users_to_invite }}];
 
 
         function addUser(user_id) {
@@ -61,7 +61,7 @@
         function removeUser(user_id) {
             var new_list = [];
             for (var i = 0; i < users_to_add.length; i++){
-                if (users_to_add[i] != user_id) 
+                if (users_to_add[i] != user_id)
                     new_list.push(users_to_add[i]);
             }
             users_to_add = new_list;
@@ -72,13 +72,13 @@
             user_id = parseInt(user_id);
             if (users_to_add.find((elem, index, arr)=>{if (elem==user_id) {return true;}}))
                 removeUser(user_id);
-            else 
+            else
                 addUser(user_id);
         }
 
         function sendForm() {
             if (document.getElementById('id_name').value.length < 2) {
-                alert("Chat's title length must be greater than 2"); 
+                alert("Chat's title length must be greater than 2");
                 return;
             }
 
@@ -92,5 +92,10 @@
             })
         }
 
+        window.onload = function() {
+            for (var i = 0; i < users_to_add.length; i++) {
+                $('#form__select_option-button--trigger-' + users_to_add[i]).addClass('active');
+            }
+        }
     </script>
 </html>

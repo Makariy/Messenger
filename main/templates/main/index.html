@@ -10,6 +10,11 @@
 </head>
 <body>
 	<div class="menu">
+		<div class="menu__chat">
+			<a href="{% url 'chat_settings' %}" class="menu__chat-link">
+				Chat settings
+			</a>
+		</div>
 		<div class="exit">
 			<a class="exit__button" href="{% url 'chats_handler' %}?action=exit">
 				Exit account

@@ -8,6 +8,7 @@ from .views import ChatsCreator
 from .views import UserSettings
 from .views import request_session_id
 from .views import FileHandler
+from .views import ChatSettings
 
 
 messages_page = MessagesPage()
@@ -17,6 +18,7 @@ chats_handler = ChatsHandler()
 chats_creator = ChatsCreator()
 user_settings = UserSettings()
 file_handler = FileHandler()
+chat_settings = ChatSettings()
 
 urlpatterns = [
 	path('', messages_page.handle, name='messages_page'),
@@ -27,4 +29,5 @@ urlpatterns = [
 	path('user_settings/', user_settings.handle, name='user_settings'),
 	path('get_session_id/', request_session_id, name='session_id'),
 	path('file_upload/', file_handler.handle, name='file_handler'),
+	path('chat_settings/', chat_settings.handle, name='chat_settings'),
 ]
