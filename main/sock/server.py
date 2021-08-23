@@ -52,7 +52,7 @@ class MessageServer():
 			'del': self.delete,
 		}
 
-	async def register(self, websocket):
+	async def _register(self, websocket):
 		'''
 			Adds websocket to monitoring chats and active connections
 		'''
@@ -75,7 +75,7 @@ class MessageServer():
 		except:
 			raise self.RegistrationError('Unknown error during registration')
 
-	async def unregister(self, connection, chat):
+	async def _unregister(self, connection, chat):
 		'''
 			Unregister websocket from chat query and active connections
 		'''
@@ -83,6 +83,16 @@ class MessageServer():
 			self.chats[chat.title].remove(connection)
 		if connection:
 			await connection.socket.close()
+
+	async def unregister(self, user=None, chat=None, connection=None):
+		if user and chat:
+			connection = await self.get_connection_by_user(user, chat.title)
+
+		if connection:
+			await connection.socket.send(json.dumps({
+				'command': 'disconnect',
+				'code': 'DISCONNECTED'
+			}))
 
 	async def _send_message(self, connection, message):
 		template = loader.get_template('main/messages.html')
@@ -124,7 +134,7 @@ class MessageServer():
 		connection = None
 		chat = None
 		try:
-			connection, chat = await self.register(websocket)
+			connection, chat = await self._register(websocket)
 
 			while True:
 				message = json.loads(await websocket.recv())
@@ -136,7 +146,19 @@ class MessageServer():
 		except:
 			pass
 		finally:
-			await self.unregister(connection, chat)
+			await self._unregister(connection, chat)
+
+	async def get_connection_by_user(self, user, chat_title):
+		for connection in self.chats[chat_title]:
+			if connection.user.id == user.id:
+				return connection
+		return None
+
+	async def get_chat_by_connection(self, connection):
+		for chat in self.chats:
+			if connection in self.chats[chat]:
+				return await run_sync(lambda: Chat.objects.all().get(title=chat))
+		return None
 
 	async def notify_img(self, user, chat, file_id):
 		'''

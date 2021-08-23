@@ -146,6 +146,9 @@
 				document.getElementsByClassName('messages')[0].innerHTML += message.data;
 				scrollToLastMessage();
 			}
+			if (message.command == 'disconnect') {
+				document.location.href = document.location.protocol  + '//' + document.location.host 
+			}
 		}
 		ws.onopen = function() {
 			data = $.get('/get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data); });

@@ -289,6 +289,7 @@ class ChatSettings(PageBase):
             chat = Chat.objects.all().get(title=chat_title)
         except ObjectDoesNotExist:
             chat = None
+
         if user and not user.is_anonymous and chat:
             if user in chat.users.all():
                 args['user'] = user
@@ -322,15 +323,21 @@ class ChatSettings(PageBase):
                         args['chat'].users.add(user)
                 except ObjectDoesNotExist:
                     pass
+
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            asyncio.set_event_loop(asyncio.new_event_loop())
+            loop = asyncio.get_event_loop()
+
         for user in args['chat'].users.all():
             try:
                 if (user.id not in users_ids) and (not user.id == args['user'].id):
                     args['chat'].users.remove(user)
-
+                    asyncio.run(message_server.unregister(user, args['chat']))
 
             except ObjectDoesNotExist:
                 pass
-
 
         args['chat'].save()
         return self.redirect('messages_page', {'chat_name': request.POST.get('title')})
