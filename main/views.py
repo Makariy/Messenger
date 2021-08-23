@@ -113,7 +113,7 @@ def start_message_socket(host):
 
 
 class MessagesPage(PageBase):
-    websocket_thread = threading.Thread(target=lambda:print('You must restore this thread to create WebSocket thread'))
+    websocket_thread = threading.Thread(target=lambda: print('You must restore this thread to create WebSocket thread'))
 
     def handle(self, request, *params, **args):
         if not self.websocket_thread.is_alive():
@@ -133,6 +133,8 @@ class MessagesPage(PageBase):
             return self.redirect('chats_handler')
         try:
             chat = Chat.objects.all().get(title=chat_title)
+            if args['user'] not in chat.users.all():
+                return self.redirect('chats_handler', {'chat_name': None})
         except ObjectDoesNotExist:
             return self.redirect('chats_handler')
         messages = Message.objects.all().filter(chat=chat).order_by('pk')
@@ -304,13 +306,31 @@ class ChatSettings(PageBase):
         return render(request, 'main/chat_settings.html', context)
 
     def post(self, request: HttpRequest, *params, **args):
-        users_ids = request.POST.getlist('users[]')
+        users_ids = []
+        try:
+            for user_id in request.POST.getlist('users[]'):
+                users_ids.append(int(user_id))
+        except:
+            return self.redirect('main')
+
         args['chat'].title = request.POST.get('title')
         if users_ids:
             for user_id in users_ids:
                 try:
-                    args['chat'].users.add(User.objects.all().get(id=user_id))
+                    user = User.objects.all().get(id=user_id)
+                    if user not in args['chat'].users.all():
+                        args['chat'].users.add(user)
                 except ObjectDoesNotExist:
                     pass
+        for user in args['chat'].users.all():
+            try:
+                if (user.id not in users_ids) and (not user.id == args['user'].id):
+                    args['chat'].users.remove(user)
+
+
+            except ObjectDoesNotExist:
+                pass
+
+
         args['chat'].save()
         return self.redirect('messages_page', {'chat_name': request.POST.get('title')})

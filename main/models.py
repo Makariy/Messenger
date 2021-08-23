@@ -12,7 +12,6 @@ class Message(models.Model):
     date = models.DateTimeField(auto_now=True, verbose_name='Published date')
     id = models.AutoField(primary_key=True, verbose_name='Id')
 
-
     class Meta:
         verbose_name = "Message"
         verbose_name_plural = "Messages"
@@ -40,12 +39,10 @@ class MessageData(models.Model):
         return super().delete(*args, **kwargs)
 
 
-
 class Chat(models.Model):
     title = models.CharField(max_length=30, verbose_name='Chat name')
     users = models.ManyToManyField(User, verbose_name='Chat members')
     id = models.AutoField(primary_key=True, verbose_name='Id')
-
 
     def __str__(self):
         return str(self.title)
