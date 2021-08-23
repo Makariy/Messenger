@@ -83,7 +83,6 @@
 
 <script>
 	var ws = null;
-	var command = '';
 	var checking_open_file = null;
 
 	function getLastMessage() {
@@ -134,23 +133,19 @@
 
 	function connect() {
 		ws = new WebSocket('ws://' + window.location.hostname + ':8001');
-		ws.onmessage = function(message) {
-			if (command == '') {
-				command = message.data;
-				return;
-			}
-			if (command == 'send_mes') {
+		ws.onmessage = function(response) {
+			message = JSON.parse(response.data);
+			if (message.command == 'send_mes') {
 				$('.messages')[0].innerHTML +=  message.data;
 				scrollToLastMessage();
 			}
-			if (command == 'del') {
+			if (message.command == 'del') {
 				document.getElementById(message.data).remove();
 			}
-			if (command == 'notify_img') {
+			if (message.command == 'notify_img') {
 				document.getElementsByClassName('messages')[0].innerHTML += message.data;
 				scrollToLastMessage();
 			}
-			command = '';
 		}
 		ws.onopen = function() {
 			data = $.get('/get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data); });
@@ -181,14 +176,18 @@
 			var message = input.value;
 			if (message == '') {return;} 
 			input.value = '';
-			ws.send('send_mes');
-			ws.send(message);
+			ws.send(JSON.stringify({
+				'command': 'send_mes',
+				'data': message,
+			}));
 		}
 	}
 
 	function deleteMessage(id) {
-		ws.send('del');
-		ws.send(id);
+		ws.send(JSON.stringify({
+			'command': 'del',
+			'data': id,
+		}));
 	}
 
 	window.onload = scrollToLastMessage;

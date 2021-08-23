@@ -1,5 +1,6 @@
 import asyncio
-import websockets
+import json
+import time
 from websockets.exceptions import ConnectionClosedOK
 
 from django.http.cookie import parse_cookie
@@ -84,8 +85,10 @@ class MessageServer():
 
 	async def _send_message(self, connection, message):
 		template = loader.get_template('main/messages.html')
-		await connection.socket.send('send_mes')
-		await connection.socket.send(str(template.render({'messages': [message], 'user': connection.user})))
+		await connection.socket.send(json.dumps({
+			'command': 'send_mes',
+			'data': str(template.render({'messages': [message], 'user': connection.user})),
+		}))
 
 	async def send_message(self, connection, chat, text):
 		data = MessageData(text=text)
@@ -106,8 +109,10 @@ class MessageServer():
 			if await run_sync(lambda: connection.user == message.author):
 				await run_sync(message.delete)
 				for _connection in self.chats[chat.title]:
-					await _connection.socket.send('del')
-					await _connection.socket.send(chat_id)
+					await _connection.socket.send(json.dumps({
+						'command': 'del',
+						'data': chat_id,
+					}))
 		except:
 			pass
 
@@ -121,10 +126,10 @@ class MessageServer():
 			connection, chat = await self.register(websocket)
 
 			while True:
-				command = await websocket.recv()
-				func = self.commands.get(command)
+				message = json.loads(await websocket.recv())
+				func = self.commands.get(message['command'])
 				if func:
-					await func(connection, chat, await websocket.recv())
+					await func(connection, chat, message['data'])
 		except ConnectionClosedOK:
 			pass
 		except:
@@ -138,11 +143,13 @@ class MessageServer():
 			Notifies every user in stated chat about new file
 		'''
 		for conn in self.chats[chat.title]:
-			await conn.socket.send('notify_img')
 			template = loader.get_template('main/messages.html')
 			message = await run_sync(lambda: Message.objects.all().get(id=str(file_id)))
 			html_img = await run_sync(lambda: template.render({'messages': [message], 'user': conn.user}))
-			await conn.socket.send(str(html_img))
+			await conn.socket.send(json.dumps({
+				'command': 'notify_img',
+				'data': str(html_img)
+			}))
 
 
 class ChatServer:
@@ -158,16 +165,23 @@ class ChatServer:
 
 	async def notify(self, chat):
 		try:
-			db_message = await run_sync(lambda: Message.objects.all().filter(chat__title=chat).order_by('pk').last())
-			author_name = await run_sync(lambda: db_message.author.username)
-			if db_message.type == 'text':
-				message = await run_sync(lambda: db_message.data.text)
-			else:
-				message = 'Photo'
 			chat_id = await run_sync(lambda: Chat.objects.all().get(title=chat).pk)
+			db_message = await run_sync(lambda: Message.objects.all().filter(chat__title=chat).order_by('pk').last())
+
+			if db_message:
+				author_name = await run_sync(lambda: db_message.author.username)
+				if db_message.type == 'text':
+					message = await run_sync(lambda: db_message.data.text)
+				else:
+					message = 'Photo'
+				data = str(author_name) + ': ' + str(message)
+			else:
+				data = 'There are no messages right now. You can be first to write something!'
 			for connection in self.chats[chat]:
-				await connection.socket.send(str(chat_id))
-				await connection.socket.send(str(author_name) + ': ' + str(message))
+				await connection.socket.send(json.dumps({
+					'chat_id': str(chat_id),
+					'data': data,
+				}))
 		except:
 			pass
 
@@ -197,14 +211,18 @@ class ChatServer:
 		if self.is_monitoring_empty():
 			self.is_monitoring = False
 
-
 	async def monitor(self):
 		while True:
 			if not self.is_monitoring:
-				return
+				break
+			last_check = time.time()
 			for chat in self.chats:
 				await self.notify(chat)
-			await asyncio.sleep(1)
+			time_to_sleep = 0.5 - (time.time() - last_check)
+			if time_to_sleep > 0:
+				await asyncio.sleep(time_to_sleep)
+			else:
+				pass
 
 	async def handle(self, websocket, path):
 		connection = None

@@ -46,20 +46,15 @@
 <script>
 
 	var ws = null;
-	var chat_id = '';
 
 	function connect () {
 		ws = new WebSocket('ws://' + window.location.hostname + ':8002');
-		ws.onmessage = function(message) {
-			if (chat_id == '') {
-				chat_id = message.data;
-				return;
-			}
-			try{
-				document.getElementById(chat_id).getElementsByClassName('chat__last-message')[0].innerText = message.data;
+		ws.onmessage = function(response) {
+			var message = JSON.parse(response.data); 
+			try {
+				document.getElementById(message.chat_id).getElementsByClassName('chat__last-message')[0].innerText = message.data;
 			}
 			catch {}
-			chat_id = '';
 		}
 		ws.onopen = function() {
 			data = $.get('/get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data); });
