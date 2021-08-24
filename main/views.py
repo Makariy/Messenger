@@ -25,7 +25,7 @@ from .models import Chat
 from .routine import StringHasher
 from .routine import PageBase
 
-
+from .sock.server import get_last_messages
 from .sock.server import MessageServer
 from .sock.server import ChatServer
 
@@ -37,7 +37,7 @@ message_server = MessageServer()
 class Authorization(PageBase):
     def _check_user(self, data):
         try:
-            user = User.objects.all().get(username=data.get('username'))
+            user = User.objects.get(username=data.get('username'))
             if not user.check_password(data.get('password')):
                 return 'Incorrect password'
             else:
@@ -71,9 +71,9 @@ class Registration(PageBase):
             return "Your name is too short or starts with a digit"
         if (len(user['password']) < 6) or (not user['password'].lower().find(user['username'].lower()) == -1):
             return "Your password is too short or contains your name"
-        if User.objects.all().filter(username=user['username']).count() > 0:
+        if User.objects.filter(username=user['username']).count() > 0:
             return "This name is already used"
-        if User.objects.all().filter(email=user['email']).count() > 0:
+        if User.objects.filter(email=user['email']).count() > 0:
             return "This mail is already used"
         return ''
 
@@ -132,12 +132,12 @@ class MessagesPage(PageBase):
         if not chat_title:
             return self.redirect('chats_handler')
         try:
-            chat = Chat.objects.all().get(title=chat_title)
+            chat = Chat.objects.get(title=chat_title)
             if args['user'] not in chat.users.all():
                 return self.redirect('chats_handler', {'chat_name': None})
         except ObjectDoesNotExist:
             return self.redirect('chats_handler')
-        messages = Message.objects.all().filter(chat=chat).order_by('pk')
+        messages = get_last_messages(chat=chat)
         context = {'messages': messages, 'user': args['user']}
         return render(request, 'main/index.html', context)
 
@@ -187,7 +187,7 @@ class ChatsHandler(PageBase):
         if not action:
             user = get_user(request)
             chats = Chat.objects.filter(users__username=user.username)
-            last_messages = [Message.objects.all().filter(chat=chat).order_by('pk').last() for chat in chats]
+            last_messages = [Message.objects.filter(chat=chat).order_by('pk').last() for chat in chats]
 
             display = []
             for i in range(len(chats)):
@@ -202,7 +202,7 @@ class ChatsCreator(PageBase):
     @staticmethod
     def check_chat(request):
         data = request.POST
-        if len(Chat.objects.all().filter(title=data['title'])) > 0:
+        if len(Chat.objects.filter(title=data['title'])) > 0:
             return False
         if len(data['title']) < 2:
             return False
@@ -234,7 +234,7 @@ class ChatsCreator(PageBase):
             users_id = request.POST.getlist('users[]')
             for user_id in users_id:
                 try:
-                    user = User.objects.all().get(id=int(user_id))
+                    user = User.objects.get(id=int(user_id))
                     chat.users.add(user)
 
                 except ObjectDoesNotExist:
@@ -258,9 +258,12 @@ class UserSettings(PageBase):
 class FileHandler(PageBase):
     @csrf_exempt
     def handle(self, request: HttpRequest, *params, **args):
-        user = get_user(request)
-        chat = Chat.objects.all().get(title=request.COOKIES.get('chat_name'))
-        if (not user) or (user.is_anonymous) or (chat not in Chat.objects.all().filter(users=user)):
+        try:
+            user = get_user(request)
+            chat = Chat.objects.get(title=request.COOKIES.get('chat_name'))
+        except ObjectDoesNotExist:
+            return self.redirect('messages_page')
+        if (not user) or (user.is_anonymous) or (chat not in Chat.objects.filter(users=user)):
             return self.redirect('messages_page')
         args['user'] = user
         args['chat'] = chat
@@ -277,7 +280,7 @@ class FileHandler(PageBase):
         return HttpResponse('')
 
     def get(self, request: HttpRequest, *params, **args):
-        image = Message.objects.all().get(id=int(request.GET.get('file_id'))).data.image
+        image = Message.objects.get(id=int(request.GET.get('file_id'))).data.image
         return FileResponse(image.file)
 
 
@@ -286,7 +289,7 @@ class ChatSettings(PageBase):
         user = get_user(request)
         chat_title = request.COOKIES.get('chat_name')
         try:
-            chat = Chat.objects.all().get(title=chat_title)
+            chat = Chat.objects.get(title=chat_title)
         except ObjectDoesNotExist:
             chat = None
 
@@ -307,12 +310,13 @@ class ChatSettings(PageBase):
         return render(request, 'main/chat_settings.html', context)
 
     def post(self, request: HttpRequest, *params, **args):
+        # Get users to add
         users_ids = []
-        try:
-            for user_id in request.POST.getlist('users[]'):
+        for user_id in request.POST.getlist('users[]'):
+            try:
                 users_ids.append(int(user_id))
-        except:
-            return self.redirect('main')
+            except ValueError:
+                pass
 
         try:
             loop = asyncio.get_event_loop()
@@ -320,26 +324,33 @@ class ChatSettings(PageBase):
             asyncio.set_event_loop(asyncio.new_event_loop())
             loop = asyncio.get_event_loop()
 
+        # Rename chat
+        chat_server.rename_chat(args['chat'].title, request.POST.get('title'))
         args['chat'].title = request.POST.get('title')
+
+        # Add users to chat
         if users_ids:
             for user_id in users_ids:
                 try:
-                    user = User.objects.all().get(id=user_id)
+                    user = User.objects.get(id=user_id)
                     if user not in args['chat'].users.all():
                         args['chat'].users.add(user)
+                        # If user is connected to chat_server, then notify him about new chat
                         if chat_server.is_user_connected(user):
                             loop.run_until_complete(chat_server.add_user_to_chat(user, args['chat']))
 
                 except ObjectDoesNotExist:
                     pass
 
+        # Remove users
         for user in args['chat'].users.all():
             try:
                 if (user.id not in users_ids) and (not user.id == args['user'].id):
                     args['chat'].users.remove(user)
+                    # If user is connected to message_server, then stop notifying him
                     if message_server.is_user_connected(user):
                         asyncio.run(message_server.unregister(user, args['chat']))
-
+                    # If user is connected to chat_server, then stop notifying him
                     if chat_server.is_user_connected(user):
                         asyncio.run(chat_server.remove_user_from_chat(user, args['chat']))
 

@@ -53,7 +53,10 @@
 			var message = JSON.parse(response.data); 
 			try {
 				if (message.command == 'update_message'){
-					document.getElementById(message.chat_id).getElementsByClassName('chat__last-message')[0].innerText = message.data;
+					var chat = document.getElementById(message.chat_id);
+					console.log(message);
+					chat.getElementsByClassName('chat__last-message')[0].innerText = message.data;
+					chat.getElementsByClassName('chat__title')[0].innerText = message.chat_title;
 				}
 				if (message.command == 'add_chat') {
 					document.getElementsByClassName('chats')[0].innerHTML += message.data;
