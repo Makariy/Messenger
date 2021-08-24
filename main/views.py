@@ -314,6 +314,12 @@ class ChatSettings(PageBase):
         except:
             return self.redirect('main')
 
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            asyncio.set_event_loop(asyncio.new_event_loop())
+            loop = asyncio.get_event_loop()
+
         args['chat'].title = request.POST.get('title')
         if users_ids:
             for user_id in users_ids:
@@ -321,20 +327,21 @@ class ChatSettings(PageBase):
                     user = User.objects.all().get(id=user_id)
                     if user not in args['chat'].users.all():
                         args['chat'].users.add(user)
+                        if chat_server.is_user_connected(user):
+                            loop.run_until_complete(chat_server.add_user_to_chat(user, args['chat']))
+
                 except ObjectDoesNotExist:
                     pass
-
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            asyncio.set_event_loop(asyncio.new_event_loop())
-            loop = asyncio.get_event_loop()
 
         for user in args['chat'].users.all():
             try:
                 if (user.id not in users_ids) and (not user.id == args['user'].id):
                     args['chat'].users.remove(user)
-                    asyncio.run(message_server.unregister(user, args['chat']))
+                    if message_server.is_user_connected(user):
+                        asyncio.run(message_server.unregister(user, args['chat']))
+
+                    if chat_server.is_user_connected(user):
+                        asyncio.run(chat_server.remove_user_from_chat(user, args['chat']))
 
             except ObjectDoesNotExist:
                 pass

@@ -1,0 +1,12 @@
+<a href="{% url 'chats_handler' %}?action=get_chat&chat_name={{ display.0.title }}">
+    <div class="chat" id="{{ chat.id }}">
+        <h4 class="chat__title">{{ chat.title }}</h4>
+        <p class="chat__last-message">
+            {% if last_message %}
+            {{ last_message.author.username }}: {% if last_message.type == 'text' %}{{ last_message.data.text }}{% else %}Photo{% endif %}
+            {% else %}
+            There are no messages right now. You can be first to write something!
+            {% endif %}
+        </p>
+    </div>
+</a>

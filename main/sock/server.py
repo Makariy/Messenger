@@ -5,6 +5,7 @@ from websockets.exceptions import ConnectionClosedOK
 
 from django.http.cookie import parse_cookie
 from django.template import loader
+from django.shortcuts import render
 
 from django.contrib.auth.models import User
 from django.contrib.sessions.models import Session
@@ -88,6 +89,10 @@ class MessageServer():
 		if user and chat:
 			connection = await self.get_connection_by_user(user, chat.title)
 
+		if not chat:
+			chat = await self.get_chat_by_connection(connection)
+		self.chats[chat.title].remove(connection)
+
 		if connection:
 			await connection.socket.send(json.dumps({
 				'command': 'disconnect',
@@ -160,6 +165,13 @@ class MessageServer():
 				return await run_sync(lambda: Chat.objects.all().get(title=chat))
 		return None
 
+	def is_user_connected(self, user):
+		for chat in self.chats:
+			for connection in self.chats[chat]:
+				if connection.user.id == user.id:
+					return True
+		return False
+
 	async def notify_img(self, user, chat, file_id):
 		'''
 			Function is being called from FileHandler.
@@ -202,6 +214,7 @@ class ChatServer:
 				data = 'There are no messages right now. You can be first to write something!'
 			for connection in self.chats[chat]:
 				await connection.socket.send(json.dumps({
+					'command': 'update_message',
 					'chat_id': str(chat_id),
 					'data': data,
 				}))
@@ -228,7 +241,6 @@ class ChatServer:
 		for chat in self.chats:
 			if connection in self.chats[chat]:
 				self.chats[chat].remove(connection)
-
 		self.connections.remove(connection)
 
 		if self.is_monitoring_empty():
@@ -266,3 +278,37 @@ class ChatServer:
 			if connection is not None:
 				await self.unregister(connection)
 
+	async def remove_user_from_chat(self, user, chat):
+		for connection in self.chats[chat.title]:
+			if connection.user.id == user.id:
+				self.chats[chat.title].remove(connection)
+				await connection.socket.send(json.dumps({
+					'command': 'remove_chat',
+					'chat_id': chat.id,
+				}))
+				return True
+		return False
+
+	async def add_user_to_chat(self, user, chat):
+		for connection in self.connections:
+			if connection.user.id == user.id:
+				last_message = await run_sync(lambda: Message.objects.all().filter(chat__title=chat.title).order_by('pk').last())
+				template = loader.get_template('main/chat.html')
+				await connection.socket.send(json.dumps({
+					'command': 'add_chat',
+					'data': await run_sync(lambda: str(template.render({
+						'chat': chat,
+						'data': last_message,
+					})))
+				}))
+				if self.chats.get(chat.title):
+					self.chats[chat.title] = [connection]
+				else:
+					self.chats[chat.title].append(connection)
+				return
+
+	def is_user_connected(self, user):
+		for connection in self.connections:
+			if connection.user.id == user.id:
+				return True
+		return False

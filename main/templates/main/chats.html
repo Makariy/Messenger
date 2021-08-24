@@ -52,7 +52,15 @@
 		ws.onmessage = function(response) {
 			var message = JSON.parse(response.data); 
 			try {
-				document.getElementById(message.chat_id).getElementsByClassName('chat__last-message')[0].innerText = message.data;
+				if (message.command == 'update_message'){
+					document.getElementById(message.chat_id).getElementsByClassName('chat__last-message')[0].innerText = message.data;
+				}
+				if (message.command == 'add_chat') {
+					document.getElementsByClassName('chats')[0].innerHTML += message.data;
+				}
+				if (message.command == 'remove_chat') {
+					document.getElementById(message.chat_id).remove();
+				}
 			}
 			catch {}
 		}
