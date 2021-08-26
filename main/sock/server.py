@@ -33,13 +33,23 @@ async def get_user(session_id):
 	return user
 
 
-def get_last_messages(chat=None, chat_title=None, count=10, start_index=0):
+def get_last_messages(chat=None, chat_title=None, count=10, last_id=-1):
 	if not chat_title and not chat:
 		return None
+
 	if chat:
-		messages = Message.objects.filter(chat=chat).order_by('-id')[start_index:start_index+count:]
+		messages = Message.objects.filter(chat=chat).order_by('-id')
 	if chat_title:
-		messages = Message.objects.filter(chat__title=chat_title).order_by('-id')[start_index:start_index + count:]
+		messages = Message.objects.filter(chat__title=chat_title).order_by('-id')
+
+	start_index = 0
+	if last_id is not -1:
+		for i in range(len(messages)):
+			if messages[i].id == int(last_id):
+				start_index = i + 1
+				break
+
+	messages = messages[start_index:start_index+count]
 	return messages[::-1]
 
 
@@ -118,14 +128,14 @@ class MessageServer():
 
 		for conn in self.chats[chat.title]:
 			template = loader.get_template('main/messages.html')
-			await connection.socket.send(json.dumps({
+			await conn.socket.send(json.dumps({
 				'command': 'get_mes',
 				'data': str(template.render({'messages': [message], 'user': connection.user})),
 			}))
 
 	async def pull_messages(self, connection, chat, request):
-		messages_length = request.get('messages_length')
-		last_messages = await run_sync(lambda: get_last_messages(chat=chat, start_index=int(messages_length)))
+		last_id = request.get('last_id')
+		last_messages = await run_sync(lambda: get_last_messages(chat=chat, last_id=int(last_id), count=20))
 		template = loader.get_template('main/messages.html')
 		await connection.socket.send(json.dumps({
 			'command': 'pull_messages',
@@ -134,7 +144,6 @@ class MessageServer():
 				'user': connection.user,
 			})))
 		}))
-
 
 	async def delete(self, connection, chat, request):
 		'''

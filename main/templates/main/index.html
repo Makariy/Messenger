@@ -82,153 +82,162 @@
 </html>
 
 <script>
+
 	var ws = null;
-	var checking_open_file = null;
+		var checking_open_file = null;
+		var last_id = 0;
 
-	function getLastMessage() {
-		var messages = document.getElementsByClassName("message");
-		if (messages)
-			return messages[messages.length-1];
-		return null;
-	}
 
-	function scrollToLastMessage() {
-		var last = getLastMessage();
-		if (last)
-			last.scrollIntoView();
-	}
 
-	$('#sender__inner_input_message').keyup(function(event) {
-		if (event.keyCode == 13) {
-			$('.sender__inner_send_button').click();
+		function getLastMessage() {
+			var messages = document.getElementsByClassName("message");
+			if (messages)
+				return messages[messages.length-1];
+			return null;
 		}
-	})
 
-	function isElementVisible(elem) {
-	    var $elem = $(elem);
-	    var $window = $(window);
-
-	    var docViewTop = $window.scrollTop();
-	    var docViewBottom = docViewTop + $window.height();
-
-	    var elemTop = $elem.offset().top;
-	    var elemBottom = elemTop + $elem.height();
-
-	    return ((elemBottom <= docViewBottom) && (elemTop >= docViewTop));
-	}
-
-	function openFileSearch() {
-		document.getElementById('sender__inner_file-input').click();
-		checking_open_file = window.setInterval(showChosenFile, 200);
-	}
-
-	function showChosenFile() {
-		var file_input = document.getElementById('sender__inner_file-input');
-		if (file_input.files[0]) {
-			if (!file_input.files[0].name.endsWith('.jpg') && !file_input.files[0].name.endsWith('.png')) 
-				{ ; file_input.value = '' ;return; }
-			window.clearInterval(checking_open_file);
-			checking_open_file = null;
-			document.getElementById('sender__inner_file-show').style['display'] = 'flex';
-			document.getElementById('sender__inner_file-show--file').innerHTML = file_input.files[0].name;
-			document.getElementById('sender__inner_file-show--button').style['display'] = 'block';
-
+		function scrollToLastMessage() {
+			var last = getLastMessage();
+			if (last)
+				last.scrollIntoView();
 		}
-	}
 
-	function removeChosenFile() {
-		document.getElementById('sender__inner_file-input').value = '';
-		document.getElementById('sender__inner_file-show').style['display'] = 'none';
-		document.getElementById('sender__inner_file-show--file').innerHTML = '';
-		document.getElementById('sender__inner_file-show--button').style['display'] = 'none';
+		$('#sender__inner_input_message').keyup(function(event) {
+			if (event.keyCode == 13) {
+				$('.sender__inner_send_button').click();
+			}
+		})
 
-	}
+		function isElementVisible(elem) {
+		    var $elem = $(elem);
+		    var $window = $(window);
 
-	function connect() {
-		ws = new WebSocket('ws://' + window.location.hostname + ':8001');
-		ws.onmessage = function(response) {
-			message = JSON.parse(response.data);
-			if (message.command == 'get_mes') {
-				$('.messages__list')[0].innerHTML +=  message.data;
-				scrollToLastMessage();
-			}
-			if (message.command == 'del') {
-				document.getElementById(message.data).remove();
-			}
-			if (message.command == 'notify_img') {
-				document.getElementsByClassName('messages')[0].innerHTML += message.data;
-				scrollToLastMessage();
-			}
-			if (message.command == 'disconnect') {
-				document.location.href = document.location.protocol  + '//' + document.location.host 
-			}
-			if (message.command == 'pull_messages') {
-				var messages = $('.messages__list')[0];
-				messages.innerHTML = message.data + messages.innerHTML; 
+		    var docViewTop = $window.scrollTop();
+		    var docViewBottom = docViewTop + $window.height();
+
+		    var elemTop = $elem.offset().top;
+		    var elemBottom = elemTop + $elem.height();
+
+		    return ((elemBottom <= docViewBottom) && (elemTop >= docViewTop));
+		}
+
+		function openFileSearch() {
+			document.getElementById('sender__inner_file-input').click();
+			checking_open_file = window.setInterval(showChosenFile, 200);
+		}
+
+		function showChosenFile() {
+			var file_input = document.getElementById('sender__inner_file-input');
+			if (file_input.files[0]) {
+				if (!file_input.files[0].name.endsWith('.jpg') && !file_input.files[0].name.endsWith('.png')) 
+					{ ; file_input.value = '' ;return; }
+				window.clearInterval(checking_open_file);
+				checking_open_file = null;
+				document.getElementById('sender__inner_file-show').style['display'] = 'flex';
+				document.getElementById('sender__inner_file-show--file').innerHTML = file_input.files[0].name;
+				document.getElementById('sender__inner_file-show--button').style['display'] = 'block';
+
 			}
 		}
-		ws.onopen = function() {
-			data = $.get('/get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data); });
-		}
-	}
 
-	function sendFile(file) {
-		var input = document.getElementById('sender__inner_file-input');
-		var fd = new FormData();
-		fd.append('file', input.files[0]);
-		$.ajax({
-			url:'/file_upload/',
-			type:'post',
-			data:fd,
-			contentType: false,
-			processData: false
-		});
-		removeChosenFile();
-	}
+		function removeChosenFile() {
+			document.getElementById('sender__inner_file-input').value = '';
+			document.getElementById('sender__inner_file-show').style['display'] = 'none';
+			document.getElementById('sender__inner_file-show--file').innerHTML = '';
+			document.getElementById('sender__inner_file-show--button').style['display'] = 'none';
 
-	function send() {
-		var file_input = document.getElementById('sender__inner_file-input');
-		if (!file_input.value == '') {
-			sendFile(file_input.files[0]);
 		}
-		else {
-			var input = document.getElementById('sender__inner_input_message');
-			var message = input.value;
-			if (message == '') {return;} 
-			input.value = '';
+
+		function connect() {
+			ws = new WebSocket('ws://' + window.location.hostname + ':8001');
+			ws.onmessage = function(response) {
+				message = JSON.parse(response.data);
+				if (message.command == 'get_mes') {
+					$('.messages__list')[0].innerHTML += message.data;
+					scrollToLastMessage();
+				}
+				if (message.command == 'del') {
+					document.getElementById(message.data).remove();
+					if (message.data == last_id) 
+						last_id = $('.messages__list')[0].children[0];
+				}
+				if (message.command == 'notify_img') {
+					document.getElementsByClassName('messages')[0].innerHTML += message.data;
+					scrollToLastMessage();
+				}
+				if (message.command == 'disconnect') {
+					document.location.href = document.location.protocol  + '//' + document.location.host 
+				}
+				if (message.command == 'pull_messages') {
+					var messages_list = $('.messages__list')[0];
+					$('.messages__list').prepend($(message.data));
+				}
+			}
+			ws.onopen = function() {
+				data = $.get('/get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data); });
+			}
+		}
+
+		function sendFile(file) {
+			var input = document.getElementById('sender__inner_file-input');
+			var fd = new FormData();
+			fd.append('file', input.files[0]);
+			$.ajax({
+				url: '/file_upload/',
+				type: 'post',
+				data: fd,
+				contentType: false,
+				processData: false
+			});
+			removeChosenFile();
+		}
+
+		function send() {
+			var file_input = document.getElementById('sender__inner_file-input');
+			if (!file_input.value == '') {
+				sendFile(file_input.files[0]);
+			}
+			else {
+				var input = document.getElementById('sender__inner_input_message');
+				var message = input.value;
+				if (message == '') {return;} 
+				input.value = '';
+				ws.send(JSON.stringify({
+					'command': 'send_mes',
+					'data': message,
+				}));
+			}
+		}
+
+		function deleteMessage(id) {
 			ws.send(JSON.stringify({
-				'command': 'send_mes',
-				'data': message,
+				'command': 'del',
+				'data': id,
 			}));
 		}
-	}
-
-	function deleteMessage(id) {
-		ws.send(JSON.stringify({
-			'command': 'del',
-			'data': id,
-		}));
-	}
 
 
-	var last_request = 0;
-	function pullMessages() {
-		var messages = $('.messages__list')[0];
-		if (!messages)
-			return;
+		function pullMessages() {
+			var messages = $('.messages__list')[0];
+			if (!messages)
+				return;
 
-		if (!isElementVisible(messages.children[0]) || last_request == messages.children.length)
-			return
+			if (!isElementVisible(messages.children[0]) || last_id == messages.children[0].id)
+				return
 
-		last_request = messages.children.length;
+			last_id = messages.children[0].id;
+			
+			ws.send(JSON.stringify({
+				'command': 'pull_messages',
+				'last_id': last_id,
+			}));
+		}
+
 		
-		ws.send(JSON.stringify({
-			'command': 'pull_messages',
-			'messages_length': messages.children.length,
-		}));
-	}
+	$(document).ready(function() {
+		window.onload = scrollToLastMessage;
+		$('.messages')[0].onscroll = pullMessages;
+		connect();
+	});
 
-	window.onload = scrollToLastMessage;
-	$('.messages')[0].onscroll = pullMessages;
-	connect();
 </script>

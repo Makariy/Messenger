@@ -173,6 +173,11 @@ button {
 	height: auto;
 	position: relative;
 }
+
+.messages {
+	position: relative;
+}
+
 .message__actions {
     position: absolute;
     top: 0;
@@ -184,8 +189,6 @@ button {
 	max-height: 500px;
 	max-width:  500px;
 }
-
-
 
 
 
