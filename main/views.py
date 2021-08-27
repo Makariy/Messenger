@@ -271,9 +271,10 @@ class FileHandler(PageBase):
 
     def post(self, request: HttpRequest, *params, **args):
         file = request.FILES.get('file')
+        file_title = request.POST.get('file_title')
 
         md = MessageData()
-        md.image.save(file.name, file)
+        md.image.save(file_title, file)
         message = Message(author=args['user'], chat=args['chat'], data=md, type='image')
         message.save()
         asyncio.run(message_server.notify_img(args['user'], args['chat'], message.id))

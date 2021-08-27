@@ -54,7 +54,6 @@
 			try {
 				if (message.command == 'update_message'){
 					var chat = document.getElementById(message.chat_id);
-					console.log(message);
 					chat.getElementsByClassName('chat__last-message')[0].innerText = message.data;
 					chat.getElementsByClassName('chat__title')[0].innerText = message.chat_title;
 				}

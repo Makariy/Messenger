@@ -78,7 +78,8 @@ class MessageServer():
 			Adds websocket to monitoring chats and active connections
 		'''
 		try:
-			cookies = parse_cookie(await websocket.recv())
+			ws_cookies = await websocket.recv()
+			cookies = parse_cookie(ws_cookies)
 
 			user = await get_user(cookies['sessionid'])
 			chat = await run_sync(lambda: Chat.objects.get(title=cookies.get('chat_name')))
