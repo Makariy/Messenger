@@ -1,4 +1,6 @@
 import asyncio
+import threading
+import websockets
 import json
 import time
 from websockets.exceptions import ConnectionClosedOK
@@ -6,6 +8,8 @@ from websockets.exceptions import ConnectionClosedOK
 from django.http.cookie import parse_cookie
 from django.template import loader
 from django.shortcuts import render
+
+from server.settings import SECRET_KEY
 
 from django.contrib.auth.models import User
 from django.contrib.sessions.models import Session
@@ -101,18 +105,19 @@ class MessageServer():
 		'''
 			Unregister websocket from chat query and active connections
 		'''
-		if chat:
+		if chat and chat.title in self.chats:
 			self.chats[chat.title].remove(connection)
 		if connection:
 			await connection.socket.close()
 
-	async def unregister(self, user=None, chat=None, connection=None, code='DISCONNECTED'):
+	async def remove_user_from_chat(self, user=None, chat=None, connection=None, code='DISCONNECTED'):
 		if user and chat:
 			connection = await self.get_connection_by_user(user, chat.title)
 
 		if not chat:
 			chat = await self.get_chat_by_connection(connection)
-		self.chats[chat.title].remove(connection)
+		if connection in self.chats[chat.title]:
+			self.chats[chat.title].remove(connection)
 
 		if connection:
 			await connection.socket.send(json.dumps({
@@ -216,6 +221,21 @@ class MessageServer():
 					return True
 		return False
 
+	async def remove_users_from_chat(self, users, chat):
+		for user in users:
+			await self.remove_user_from_chat(user, chat)
+
+	def remove_chat(self, chat):
+		try:
+			loop = asyncio.get_event_loop()
+		except RuntimeError:
+			asyncio.set_event_loop(asyncio.new_event_loop())
+			loop = asyncio.get_event_loop()
+
+		if chat.title in self.chats:
+			loop.run_until_complete(self.remove_users_from_chat(list(chat.users.all()), chat))
+			self.chats.pop(chat.title)
+
 
 class ChatServer:
 	chats = {}
@@ -253,26 +273,30 @@ class ChatServer:
 			pass
 
 	async def register(self, websocket):
-		cookies = parse_cookie(await websocket.recv())
+		msg = await websocket.recv()
+		if msg == SECRET_KEY:
+			return Connection(user='admin', socket=websocket)
+		cookies = parse_cookie(msg)
 
 		user = await get_user(cookies.get('sessionid'))
+		connection = Connection(user=user, socket=websocket)
+
 		chats = await run_sync(lambda: tuple(Chat.objects.filter(users=user)))
 		for chat in chats:
-			users = self.chats.get(chat.title)
-			connection = Connection(user=user, socket=websocket)
-			if not users:
+			if not self.chats.get(chat.title):
 				self.chats[chat.title] = [connection]
 			else:
 				self.chats[chat.title].append(connection)
-			self.connections.append(connection)
 
+		self.connections.append(connection)
 		return connection
 
 	async def unregister(self, connection):
 		for chat in self.chats:
 			if connection in self.chats[chat]:
 				self.chats[chat].remove(connection)
-		self.connections.remove(connection)
+		if connection in self.connections:
+			self.connections.remove(connection)
 
 		if self.is_monitoring_empty():
 			self.is_monitoring = False
@@ -291,13 +315,18 @@ class ChatServer:
 				pass
 
 	async def handle(self, websocket, path):
-		connection = None
 		try:
 			connection = await self.register(websocket)
+			if isinstance(connection.user, str):
+				if connection.user == 'admin':
+					await self.handle_admin(connection)
+					connection = None
+				return
 			if not self.is_monitoring:
 				if not self.is_monitoring_empty():
 					asyncio.get_event_loop().create_task(self.monitor())
 					self.is_monitoring = True
+
 			while True:
 				if not connection.socket.closed:
 					await asyncio.sleep(1)
@@ -308,6 +337,10 @@ class ChatServer:
 		finally:
 			if connection is not None:
 				await self.unregister(connection)
+
+	async def handle_admin(self, connection):
+		command = await connection.socket.recv()
+		print(command)
 
 	async def remove_user_from_chat(self, user, chat):
 		for connection in self.chats[chat.title]:
@@ -320,22 +353,32 @@ class ChatServer:
 				return True
 		return False
 
+	async def remove_users_from_chat(self, users, chat):
+		for user in users:
+			if self.is_user_connected(user):
+				await self.remove_user_from_chat(user, chat)
+
 	async def add_user_to_chat(self, user, chat):
 		for connection in self.connections:
 			if connection.user.id == user.id:
 				last_message = await run_sync(lambda: Message.objects.filter(chat__title=chat.title).order_by('id').last())
 				template = loader.get_template('main/chat.html')
-				await connection.socket.send(json.dumps({
-					'command': 'add_chat',
-					'data': await run_sync(lambda: str(template.render({
+				data = await run_sync(lambda: str(template.render({
 						'chat': chat,
 						'data': last_message,
 					})))
+				await connection.socket.send(json.dumps({
+					'command': 'add_chat',
+					'data': data
 				}))
 				if self.chats.get(chat.title):
-					self.chats[chat.title] = [connection]
-				else:
 					self.chats[chat.title].append(connection)
+				else:
+					self.chats[chat.title] = [connection]
+
+				if connection not in self.connections:
+					self.connections.append(connection)
+
 				return
 
 	def is_user_connected(self, user):
@@ -349,3 +392,64 @@ class ChatServer:
 			connections = self.chats[before]
 			self.chats.pop(before)
 			self.chats[now] = connections
+
+	def remove_chat(self, chat):
+		try:
+			loop = asyncio.get_event_loop()
+		except RuntimeError:
+			asyncio.set_event_loop(asyncio.new_event_loop())
+			loop = asyncio.get_event_loop()
+
+		if chat.title in self.chats:
+			loop.run_until_complete(self.remove_users_from_chat(list(chat.users.all()), chat))
+			connections = self.chats.pop(chat.title)
+			for connection in connections:
+				self.connections.remove(connection)
+
+
+class WebSocketHandler:
+	def __init__(self):
+		self.path = {
+			'messenger': MessageServer(),
+			'chat': ChatServer()
+		}
+		self.server_thread = threading.Thread(target=self._start_websocket)
+
+	async def handle(self, websocket, path):
+		server = self.path.get(await websocket.recv())
+		if server:
+			await server.handle(websocket, path)
+
+	def start(self):
+		if not self.server_thread.is_alive():
+			self.server_thread.start()
+
+	def _start_websocket(self):
+		loop = asyncio.new_event_loop()
+		asyncio.set_event_loop(loop)
+		start_server = websockets.serve(self.handle, '0.0.0.0', 8001)
+		loop.run_until_complete(start_server)
+
+		if not loop.is_running():
+			loop.run_forever()
+
+	def get_chat(self):
+		return self.path.get('chat')
+
+	def get_messenger(self):
+		return self.path.get('messenger')
+
+
+class WebSocketAdmin:
+	def __init__(self):
+		self.loop = asyncio.new_event_loop()
+
+	async def _send(self, msg):
+		async with websockets.connect('ws://127.0.0.1:8001') as chat_client:
+			await chat_client.send('chat')
+			await chat_client.send(SECRET_KEY)
+
+			await chat_client.send(msg)
+
+	def send(self, msg):
+		self.loop.run_until_complete(self._send(msg))

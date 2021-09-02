@@ -48,7 +48,7 @@
 	var ws = null;
 
 	function connect () {
-		ws = new WebSocket('ws://' + window.location.hostname + ':8002');
+		ws = new WebSocket('ws://' + window.location.hostname + ':8001');
 		ws.onmessage = function(response) {
 			var message = JSON.parse(response.data); 
 			try {
@@ -67,6 +67,7 @@
 			catch {}
 		}
 		ws.onopen = function() {
+			ws.send('chat');
 			data = $.get('/get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data); });
 		}
 	}

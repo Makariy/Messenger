@@ -26,12 +26,14 @@ from .routine import StringHasher
 from .routine import PageBase
 
 from .sock.server import get_last_messages
-from .sock.server import MessageServer
-from .sock.server import ChatServer
+from .sock.server import WebSocketHandler
+from .sock.server import WebSocketAdmin
 
 
-chat_server = ChatServer()
-message_server = MessageServer()
+websocket_server = WebSocketHandler()
+websocket_server.start()
+
+websocket_admin = WebSocketAdmin()
 
 
 class Authorization(PageBase):
@@ -102,24 +104,8 @@ def request_session_id(request):
     return HttpResponse(request.COOKIES.get('sessionid'))
 
 
-def start_message_socket(host):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    start_server = websockets.serve(message_server.handle, '0.0.0.0', 8001)
-    loop.run_until_complete(start_server)
-    if not loop.is_running():
-        loop.run_forever()
-
-
 class MessagesPage(PageBase):
-    websocket_thread = threading.Thread(target=lambda: print('You must restore this thread to create WebSocket thread'))
-
     def handle(self, request, *params, **args):
-        if not self.websocket_thread.is_alive():
-            self.websocket_thread = threading.Thread(target=start_message_socket, args=(request.get_host().split(':')[0],))
-            self.websocket_thread.start()
-
         user = get_user(request)
         if user and not user.is_anonymous:
             args['user'] = user
@@ -142,26 +128,8 @@ class MessagesPage(PageBase):
         return render(request, 'main/index.html', context)
 
 
-def start_chats_socket(host):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    start_server = websockets.serve(chat_server.handle, '0.0.0.0', 8002)
-    loop.run_until_complete(start_server)
-
-    if not loop.is_running():
-        loop.run_forever()
-
-
 class ChatsHandler(PageBase):
-    websocket_thread = threading.Thread(target=lambda: print('You must restore this thread to create WebSocket thread'))
-
     def handle(self, request: HttpRequest, *params, **args):
-        if not self.websocket_thread.is_alive():
-            self.websocket_thread = threading.Thread(target=start_chats_socket,
-                                                     args=(request.get_host().split(':')[0],))
-            self.websocket_thread.start()
-
         user = get_user(request)
         if user and not user.is_anonymous:
             return super().handle(request, *params, **args)
@@ -226,16 +194,28 @@ class ChatsCreator(PageBase):
         return render(request, 'main/chat_create.html', {'users': users})
 
     def post(self, request: HttpRequest, *params, **args):
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            asyncio.set_event_loop(asyncio.new_event_loop())
+            loop = asyncio.get_event_loop()
+
+        author = get_user(request)
+
         if ChatsCreator.check_chat(request):
             chat = Chat()
             chat.title = request.POST.get('title')
+            chat.admin = author
             chat.save()
-            chat.users.add(get_user(request))
+            chat.users.add(author)
             users_id = request.POST.getlist('users[]')
             for user_id in users_id:
                 try:
                     user = User.objects.get(id=int(user_id))
                     chat.users.add(user)
+
+                    if websocket_server.get_chat().is_user_connected(user):
+                        loop.run_until_complete(websocket_server.get_chat().add_user_to_chat(user, chat))
 
                 except ObjectDoesNotExist:
                     pass
@@ -277,7 +257,7 @@ class FileHandler(PageBase):
         md.image.save(file_title, file)
         message = Message(author=args['user'], chat=args['chat'], data=md, type='image')
         message.save()
-        asyncio.run(message_server.notify_img(args['user'], args['chat'], message.id))
+        asyncio.run(websocket_server.get_messenger().notify_img(args['user'], args['chat'], message.id))
         return HttpResponse('')
 
     def get(self, request: HttpRequest, *params, **args):
@@ -302,12 +282,21 @@ class ChatSettings(PageBase):
         return self.redirect('messages_page')
 
     def get(self, request: HttpRequest, *params, **args):
+        action = request.GET.get('action')
+        if action == 'delete':
+            if args['chat'].admin == args['user']:
+                websocket_server.get_chat().remove_chat(args['chat'])
+                websocket_server.get_messenger().remove_chat(args['chat'])
+                args['chat'].delete()
+
+                return self.redirect('messages_page')
+
         users = ChatsCreator.get_users_to_invite(request)
         users_to_invite = ''
         for user in args['chat'].users.all():
             if not user.id == args['user'].id:
                 users_to_invite += str(user.id) + ', '
-        context = {'users': users, 'users_to_invite': users_to_invite, 'chat_name': args['chat'].title}
+        context = {'users': users, 'users_to_invite': users_to_invite, 'chat': args['chat'], 'user': args['user']}
         return render(request, 'main/chat_settings.html', context)
 
     def post(self, request: HttpRequest, *params, **args):
@@ -324,6 +313,9 @@ class ChatSettings(PageBase):
         except RuntimeError:
             asyncio.set_event_loop(asyncio.new_event_loop())
             loop = asyncio.get_event_loop()
+
+        chat_server = websocket_server.get_chat()
+        messenger_server = websocket_server.get_messenger()
 
         # Rename chat
         chat_server.rename_chat(args['chat'].title, request.POST.get('title'))
@@ -348,9 +340,9 @@ class ChatSettings(PageBase):
             try:
                 if (user.id not in users_ids) and (not user.id == args['user'].id):
                     args['chat'].users.remove(user)
-                    # If user is connected to message_server, then stop notifying him
-                    if message_server.is_user_connected(user):
-                        asyncio.run(message_server.unregister(user, args['chat']))
+                    # If user is connected to messenger_server, then stop notifying him
+                    if messenger_server.is_user_connected(user):
+                        asyncio.run(messenger_server.remove_user_from_chat(user, args['chat']))
                     # If user is connected to chat_server, then stop notifying him
                     if chat_server.is_user_connected(user):
                         asyncio.run(chat_server.remove_user_from_chat(user, args['chat']))

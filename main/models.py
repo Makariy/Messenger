@@ -42,6 +42,7 @@ class MessageData(models.Model):
 class Chat(models.Model):
     title = models.CharField(max_length=30, verbose_name='Chat name')
     users = models.ManyToManyField(User, verbose_name='Chat members')
+    admin = models.ForeignKey(User, null=True, related_name='admin', on_delete=models.PROTECT)
     id = models.AutoField(primary_key=True, verbose_name='Id')
 
     def __str__(self):

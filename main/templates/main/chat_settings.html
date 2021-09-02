@@ -15,24 +15,27 @@
                     Exit account
                 </a>
                 <a class="exit__chat-button" href="{% url 'chats_handler' %}?action=exit_chat">
-                    Exit creation
+                    Exit settings
                 </a>
             </div>
         </div>
         <div class="container">
             <div class="login__inner">
                 <h1 class="login__title">
-                    Create chat
+                    Chat settings
                 </h1>
                 <div class="login__fields">
+                    <div class="form__delete">
+                        <a href="{% url 'chat_settings' %}?action=delete" class="form__delete_link">Delete</a>
+                    </div>
                     <div id="csrf_token" style="display: none;">
                         {% csrf_token %}
                     </div>
-                    <input type="text" name="title" value="{{ chat_name }}" required class="form__title" placeholder="Chat name" id="id_name">
+                    <input type="text" name="title" value="{{ chat.title }}" required class="form__title" placeholder="Chat name" id="id_name">
                     <ul class="form__select">
                         {% for user in users %}
                         <li class="form__select_option">
-                            <button onclick="handleOption('{{ user.id }}')" class="form__select_option-button" >
+                            <button onclick="handleOption('{{ user.id }}')" class="form__select_option-button">
                                 <div class="form__select_option-button--trigger" id="form__select_option-button--trigger-{{ user.id }}"></div>
                                 <p class="form__select_option-option">{{ user.username }}</p>
                             </button>
@@ -52,7 +55,7 @@
 
         var users_to_add = [{{ users_to_invite }}];
 
-
+        {% if chat.admin == user %}
         function addUser(user_id) {
             $('#form__select_option-button--trigger-' + user_id).addClass('active');
             users_to_add.push(user_id);
@@ -91,6 +94,7 @@
                 success: () => ( document.location = document.location.protocol + "//" + document.location.host)
             })
         }
+        {% endif %}
 
         window.onload = function() {
             for (var i = 0; i < users_to_add.length; i++) {

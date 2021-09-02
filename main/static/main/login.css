@@ -37,13 +37,16 @@ a {
 	border-radius: 30px;
 	padding: 10px 80px;
 }
+.login__inner a {
+	color: blue;
+}
 
 .login__fields {
-	width: 40%;
 	display: flex;
     flex-direction: column;
     align-items: center;
 }
+
 .login__fields form {
 	display: flex;
 	flex-direction: column;
@@ -151,7 +154,7 @@ a {
     padding: 10px 20px;
     border: 2px solid #adadad;
     border-radius: 20px;
-    margin-bottom: 10px;
+    margin-top: 10px;
 }
 
 .login__errors {
@@ -191,9 +194,6 @@ a {
 
 @media (max-width: 1330px){
 
-	.login__fields {
-		width: 60%;
-	}
 }
 
 
