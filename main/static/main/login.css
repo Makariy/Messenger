@@ -163,6 +163,11 @@ a {
     font-size: 14px;
 }
 
+.form__error-text {
+    color: red;
+    margin-bottom: 0;
+    font-size: 14px;	
+}
 
 .menu {
 	display: flex;

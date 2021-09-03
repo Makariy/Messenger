@@ -162,11 +162,14 @@ class ChatsCreator(PageBase):
     def check_chat(request):
         data = request.POST
         if len(Chat.objects.filter(title=data['title'])) > 0:
-            return False
+            return 'Chat with this name already exist'
         if len(data['title']) < 2:
-            return False
+            return 'Chat title must be longer than 2'
+        for ch in data['title']:
+            if not 65 <= ord(ch) <= 122:
+                return 'Chat title must be in english'
 
-        return True
+        return None
 
     @staticmethod
     def get_users_to_invite(request):
@@ -187,7 +190,8 @@ class ChatsCreator(PageBase):
     def post(self, request: HttpRequest, *params, **args):
         author = get_user(request)
 
-        if ChatsCreator.check_chat(request):
+        error = ChatsCreator.check_chat(request)
+        if not error:
             chat = Chat()
             chat.title = request.POST.get('title')
             chat.admin = author
@@ -206,8 +210,9 @@ class ChatsCreator(PageBase):
                     pass
                 except ValueError:
                     pass
+            return HttpResponse()
 
-        return self.redirect('chats_handler', {'chat_name': chat.title})
+        return HttpResponse(error)
 
 
 class UserSettings(PageBase):

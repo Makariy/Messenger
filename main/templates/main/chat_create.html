@@ -39,6 +39,11 @@
                         </li>
                         {% endfor %}
                     </ul>
+                    <div class="form__error">
+                        <p class="form__error-text">
+                            
+                        </p>
+                    </div>
                     <button class="login__submit-button" onclick="sendForm()">
                         <input class="login__submit" type="submit" value="Enter">
                     </button>
@@ -88,7 +93,12 @@
                 data:  {'title': document.getElementById('id_name').value,
                         'users[]': users_to_add,
                         'csrfmiddlewaretoken': document.getElementById('csrf_token').children[0].value},
-                success: () => ( document.location = document.location.protocol + "//" + document.location.host)
+                success: function (response) { 
+                    if (response == '')
+                        document.location = document.location.protocol + "//" + document.location.host;
+                    else
+                        $('.form__error-text')[0].innerText = response;
+                },
             })
         }
 
