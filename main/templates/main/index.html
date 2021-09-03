@@ -163,7 +163,8 @@
 				}
 				if (message.command == 'notify_img') {
 					$('.messages__list')[0].innerHTML += message.data;
-					scrollToLastMessage();
+					var last_message = getLastMessage();
+					last_message.getElementsByTagName('img')[0].onload = scrollToLastMessage;
 				}
 				if (message.command == 'disconnect') {
 					document.location.href = document.location.protocol  + '//' + document.location.host 

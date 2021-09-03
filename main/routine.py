@@ -3,21 +3,6 @@ from django.shortcuts import redirect
 from django.urls import reverse_lazy
 
 
-class StringHasher:
-    @staticmethod
-    def get_hash(s):
-        number = 0
-        for letter in s:
-            number += ((ord(letter)**2) << 2 >> 1)
-
-        result = str(number)
-        ret = ''
-        for i in range(0, len(result), 2):
-            ret += chr(int(result[i] + result[i+1]))
-
-        return ret
-
-
 class PageBase:
     def __init__(self):
         pass

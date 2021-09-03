@@ -9,7 +9,7 @@
     <img src="/file_upload?file_id={{ message.id }}" class="message__inner message__image">
   {% endif %}
   <div class="message__actions">
-    {% if user == message.author %}
+    {% if user.id == message.author.id %}
       <button class="message__actions-delete" onclick="deleteMessage({{ message.pk }})">Delete</button>
     {% endif %}
   </div>

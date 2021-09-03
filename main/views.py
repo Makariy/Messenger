@@ -1,10 +1,3 @@
-import asyncio
-import websockets
-import threading
-import os
-
-from django.conf import settings
-
 from django.shortcuts import render
 from django.http import HttpRequest, HttpResponse, FileResponse
 
@@ -16,15 +9,14 @@ from django.views.decorators.csrf import csrf_exempt
 
 from django.contrib.auth.models import User
 from django.contrib.auth import get_user, authenticate, login, logout
-from django.contrib.auth.hashers import make_password
 
 from .models import Message
 from .models import MessageData
 from .models import Chat
 
-from .routine import StringHasher
 from .routine import PageBase
 
+from .sock.server import run_async
 from .sock.server import get_last_messages
 from .sock.server import WebSocketHandler
 from .sock.server import WebSocketAdmin
@@ -133,7 +125,7 @@ class ChatsHandler(PageBase):
         user = get_user(request)
         if user and not user.is_anonymous:
             return super().handle(request, *params, **args)
-        return redirect(reverse_lazy('messages_page'))
+        return self.redirect('messages_page')
 
     def get(self, request: HttpRequest, *params, **args):
         action = request.GET.get('action')
@@ -143,11 +135,10 @@ class ChatsHandler(PageBase):
 
         if action == 'exit':
             logout(request)
-            return self.redirect('messages_page')
+            return self.redirect('messages_page', {'chat_name': None})
 
         if action == 'get_chat':
-            chat_redirect = request.GET.get('chat_name')
-            return self.redirect('messages_page', {'chat_name': chat_redirect})
+            return self.redirect('messages_page', {'chat_name': request.GET.get('chat_name')})
 
         if action == 'create_chat':
             return self.redirect('create_chat')
@@ -194,12 +185,6 @@ class ChatsCreator(PageBase):
         return render(request, 'main/chat_create.html', {'users': users})
 
     def post(self, request: HttpRequest, *params, **args):
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            asyncio.set_event_loop(asyncio.new_event_loop())
-            loop = asyncio.get_event_loop()
-
         author = get_user(request)
 
         if ChatsCreator.check_chat(request):
@@ -215,14 +200,14 @@ class ChatsCreator(PageBase):
                     chat.users.add(user)
 
                     if websocket_server.get_chat().is_user_connected(user):
-                        loop.run_until_complete(websocket_server.get_chat().add_user_to_chat(user, chat))
+                        run_async(websocket_server.get_chat().add_user_to_chat(user, chat))
 
                 except ObjectDoesNotExist:
                     pass
                 except ValueError:
                     pass
 
-        return self.redirect('chats_handler')
+        return self.redirect('chats_handler', {'chat_name': chat.title})
 
 
 class UserSettings(PageBase):
@@ -257,7 +242,7 @@ class FileHandler(PageBase):
         md.image.save(file_title, file)
         message = Message(author=args['user'], chat=args['chat'], data=md, type='image')
         message.save()
-        asyncio.run(websocket_server.get_messenger().notify_img(args['user'], args['chat'], message.id))
+        run_async(websocket_server.get_messenger().notify_img(args['user'], args['chat'], message.id))
         return HttpResponse('')
 
     def get(self, request: HttpRequest, *params, **args):
@@ -279,6 +264,7 @@ class ChatSettings(PageBase):
                 args['user'] = user
                 args['chat'] = chat
                 return super().handle(request, *params, **args)
+
         return self.redirect('messages_page')
 
     def get(self, request: HttpRequest, *params, **args):
@@ -289,7 +275,7 @@ class ChatSettings(PageBase):
                 websocket_server.get_messenger().remove_chat(args['chat'])
                 args['chat'].delete()
 
-                return self.redirect('messages_page')
+                return self.redirect('messages_page', {'chat_name': None})
 
         users = ChatsCreator.get_users_to_invite(request)
         users_to_invite = ''
@@ -308,12 +294,6 @@ class ChatSettings(PageBase):
             except ValueError:
                 pass
 
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            asyncio.set_event_loop(asyncio.new_event_loop())
-            loop = asyncio.get_event_loop()
-
         chat_server = websocket_server.get_chat()
         messenger_server = websocket_server.get_messenger()
 
@@ -330,7 +310,7 @@ class ChatSettings(PageBase):
                         args['chat'].users.add(user)
                         # If user is connected to chat_server, then notify him about new chat
                         if chat_server.is_user_connected(user):
-                            loop.run_until_complete(chat_server.add_user_to_chat(user, args['chat']))
+                            run_async(chat_server.add_user_to_chat(user, args['chat']))
 
                 except ObjectDoesNotExist:
                     pass
@@ -342,13 +322,13 @@ class ChatSettings(PageBase):
                     args['chat'].users.remove(user)
                     # If user is connected to messenger_server, then stop notifying him
                     if messenger_server.is_user_connected(user):
-                        asyncio.run(messenger_server.remove_user_from_chat(user, args['chat']))
+                        run_async(messenger_server.remove_user_from_chat(user, args['chat']))
                     # If user is connected to chat_server, then stop notifying him
                     if chat_server.is_user_connected(user):
-                        asyncio.run(chat_server.remove_user_from_chat(user, args['chat']))
+                        run_async(chat_server.remove_user_from_chat(user, args['chat']))
 
             except ObjectDoesNotExist:
                 pass
 
         args['chat'].save()
-        return self.redirect('messages_page', {'chat_name': request.POST.get('title')})
+        return self.redirect('messages_page', {'chat_name': args['chat'].title})

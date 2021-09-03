@@ -5,6 +5,7 @@ import json
 import time
 from websockets.exceptions import ConnectionClosedOK
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.http.cookie import parse_cookie
 from django.template import loader
 from django.shortcuts import render
@@ -15,7 +16,6 @@ from django.contrib.auth.models import User
 from django.contrib.sessions.models import Session
 
 from ..models import Chat, Message, MessageData
-from ..routine import StringHasher
 
 
 class Connection:
@@ -29,6 +29,16 @@ class Connection:
 
 async def run_sync(func):
 	return await asyncio.get_event_loop().run_in_executor(None, func)
+
+
+def run_async(func):
+	try:
+		loop = asyncio.get_event_loop()
+	except RuntimeError:
+		asyncio.set_event_loop(asyncio.new_event_loop())
+		loop = asyncio.get_event_loop()
+
+	return loop.run_until_complete(func)
 
 
 async def get_user(session_id):
@@ -58,7 +68,7 @@ def get_last_messages(chat=None, chat_title=None, count=10, last_id=-1):
 
 
 class MessageServer():
-	chats = {}		# Contains as a key all chats that are being monitored
+	chats = {}		# Contains as a key all chat titles that are being monitored
 					# and connections as their values
 
 	class RegistrationError(Exception):
@@ -69,8 +79,8 @@ class MessageServer():
 			return str(self.message)
 
 	def __init__(self):
-		# Before any actions a websocket recieves a command to activate
-		# the right function to handle the next request
+		# Before any actions a websocket receives a command to activate
+		# the right function to handle a request
 		self.commands = {
 			'send_mes': self.send_message,
 			'pull_messages': self.pull_messages,
@@ -82,12 +92,14 @@ class MessageServer():
 			Adds websocket to monitoring chats and active connections
 		'''
 		try:
-			ws_cookies = await websocket.recv()
-			cookies = parse_cookie(ws_cookies)
+			cookies = parse_cookie(await websocket.recv())
 
-			user = await get_user(cookies['sessionid'])
-			chat = await run_sync(lambda: Chat.objects.get(title=cookies.get('chat_name')))
-			chats = await run_sync(lambda: tuple(Chat.objects.filter(users__username=user.username)))
+			try: 	user = await get_user(cookies['sessionid'])
+			except 	ObjectDoesNotExist: raise self.RegistrationError('User with this name doesn\'t exist')
+			try: 	chat = await run_sync(lambda: Chat.objects.get(title=cookies.get('chat_name')))
+			except 	ObjectDoesNotExist: raise self.RegistrationError('Chat with this name doesn\'t exist')
+
+			chats = await run_sync(lambda: tuple(Chat.objects.filter(users__id=user.id)))
 
 			# Add user to correct chat query
 			if chat in chats:
@@ -98,14 +110,19 @@ class MessageServer():
 					self.chats[chat.title].append(connection)
 
 				return connection, chat
-		except:
-			raise self.RegistrationError('Unknown error during registration')
+			else:
+				raise self.RegistrationError('The user is not a member of this chat')
+
+		except self.RegistrationError:
+			raise
+
+		raise self.RegistrationError('Unknown error during registration')
 
 	async def _unregister(self, connection, chat):
 		'''
 			Unregister websocket from chat query and active connections
 		'''
-		if chat and chat.title in self.chats:
+		if chat and chat.title in self.chats and connection in self.chats[chat.title]:
 			self.chats[chat.title].remove(connection)
 		if connection:
 			await connection.socket.close()
@@ -126,30 +143,39 @@ class MessageServer():
 			}))
 
 	async def send_message(self, connection, chat, request):
-		data = MessageData(text=request['data'])
-		await run_sync(data.save)
+		try:
+			data = MessageData(text=request['data'])
+			await run_sync(data.save)
 
-		message = Message(author=connection.user, chat=chat, data=data, type='text')
-		await run_sync(message.save)
+			message = Message(author=connection.user, chat=chat, data=data, type='text')
+			await run_sync(message.save)
 
-		for conn in self.chats[chat.title]:
-			template = loader.get_template('main/messages.html')
-			await conn.socket.send(json.dumps({
-				'command': 'get_mes',
-				'data': str(template.render({'messages': [message], 'user': connection.user})),
-			}))
+			for conn in self.chats[chat.title]:
+				template = loader.get_template('main/messages.html')
+				await conn.socket.send(json.dumps({
+					'command': 'get_mes',
+					'data': str(template.render({
+						'messages': [message],
+						'user': conn.user
+					})),
+				}))
+		except Exception as e:
+			print('Error during sending message: ', str(e))
 
 	async def pull_messages(self, connection, chat, request):
-		last_id = request.get('last_id')
-		last_messages = await run_sync(lambda: get_last_messages(chat=chat, last_id=int(last_id), count=20))
-		template = loader.get_template('main/messages.html')
-		await connection.socket.send(json.dumps({
-			'command': 'pull_messages',
-			'data': await run_sync(lambda: str(template.render({
-				'messages': last_messages,
-				'user': connection.user,
-			})))
-		}))
+		try:
+			last_id = request.get('last_id')
+			last_messages = await run_sync(lambda: get_last_messages(chat=chat, last_id=int(last_id), count=20))
+			template = loader.get_template('main/messages.html')
+			await connection.socket.send(json.dumps({
+				'command': 'pull_messages',
+				'data': await run_sync(lambda: str(template.render({
+					'messages': last_messages,
+					'user': connection.user,
+				})))
+			}))
+		except Exception as e:
+			print('Error during pulling messages: ', str(e))
 
 	async def delete(self, connection, chat, request):
 		'''
@@ -164,22 +190,25 @@ class MessageServer():
 						'command': 'del',
 						'data': request['data'],
 					}))
-		except:
-			pass
+		except Exception as e:
+			print('Exception during deleting message: ', str(e))
 
 	async def notify_img(self, user, chat, file_id):
 		'''
 			Function is being called from FileHandler.
 			Notifies every user in stated chat about new file
 		'''
-		for conn in self.chats[chat.title]:
-			template = loader.get_template('main/messages.html')
-			message = await run_sync(lambda: Message.objects.get(id=str(file_id)))
-			html_img = await run_sync(lambda: template.render({'messages': [message], 'user': conn.user}))
-			await conn.socket.send(json.dumps({
-				'command': 'notify_img',
-				'data': str(html_img)
-			}))
+		try:
+			for conn in self.chats[chat.title]:
+				template = loader.get_template('main/messages.html')
+				message = await run_sync(lambda: Message.objects.get(id=str(file_id)))
+				html_img = await run_sync(lambda: template.render({'messages': [message], 'user': conn.user}))
+				await conn.socket.send(json.dumps({
+					'command': 'notify_img',
+					'data': str(html_img)
+				}))
+		except Exception as e:
+			print('Error during notifying img: ', str(e))
 
 	async def handle(self, websocket, path):
 		'''
@@ -197,15 +226,23 @@ class MessageServer():
 					await func(connection, chat, message)
 		except ConnectionClosedOK:
 			pass
-		except:
-			pass
+		except self.RegistrationError as e:
+			print('Error during user registration: ', str(e))
+		except Exception as e:
+			print('Unknown error during handle: ', str(e))
 		finally:
 			await self._unregister(connection, chat)
 
-	async def get_connection_by_user(self, user, chat_title):
-		for connection in self.chats[chat_title]:
-			if connection.user.id == user.id:
-				return connection
+	async def get_connection_by_user(self, user, chat_title=None):
+		if chat_title:
+			for connection in self.chats[chat_title]:
+				if connection.user.id == user.id:
+					return connection
+		else:
+			for chat in self.chats:
+				for connection in self.chats[chat]:
+					if connection.user.id == user.id:
+						return connection
 		return None
 
 	async def get_chat_by_connection(self, connection):
@@ -214,7 +251,14 @@ class MessageServer():
 				return await run_sync(lambda: Chat.objects.get(title=chat))
 		return None
 
-	def is_user_connected(self, user):
+	def is_user_connected(self, user, chat=None, chat_title=None):
+		if chat or chat_title:
+			if chat:
+				chat_title = chat.title
+			for connection in self.chats[chat_title]:
+				if connection.user.id == user.id:
+					return True
+
 		for chat in self.chats:
 			for connection in self.chats[chat]:
 				if connection.user.id == user.id:
@@ -226,14 +270,8 @@ class MessageServer():
 			await self.remove_user_from_chat(user, chat)
 
 	def remove_chat(self, chat):
-		try:
-			loop = asyncio.get_event_loop()
-		except RuntimeError:
-			asyncio.set_event_loop(asyncio.new_event_loop())
-			loop = asyncio.get_event_loop()
-
 		if chat.title in self.chats:
-			loop.run_until_complete(self.remove_users_from_chat(list(chat.users.all()), chat))
+			run_async(self.remove_users_from_chat(list(chat.users.all()), chat))
 			self.chats.pop(chat.title)
 
 
@@ -269,8 +307,8 @@ class ChatServer:
 					'chat_title': chat_title,
 					'data': data,
 				}))
-		except:
-			pass
+		except Exception as e:
+			print('Exception during notifying chats: ', str(e))
 
 	async def register(self, websocket):
 		msg = await websocket.recv()
@@ -332,10 +370,12 @@ class ChatServer:
 					await asyncio.sleep(1)
 				else:
 					break
-		except:
+		except ConnectionClosedOK:
 			pass
+		except Exception as e:
+			print('Unknown exception during handling chat')
 		finally:
-			if connection is not None:
+			if connection:
 				await self.unregister(connection)
 
 	async def handle_admin(self, connection):
@@ -394,14 +434,8 @@ class ChatServer:
 			self.chats[now] = connections
 
 	def remove_chat(self, chat):
-		try:
-			loop = asyncio.get_event_loop()
-		except RuntimeError:
-			asyncio.set_event_loop(asyncio.new_event_loop())
-			loop = asyncio.get_event_loop()
-
 		if chat.title in self.chats:
-			loop.run_until_complete(self.remove_users_from_chat(list(chat.users.all()), chat))
+			run_async(self.remove_users_from_chat(list(chat.users.all()), chat))
 			connections = self.chats.pop(chat.title)
 			for connection in connections:
 				self.connections.remove(connection)
