@@ -8,6 +8,7 @@ class PageBase:
         pass
 
     def handle(self, request: HttpRequest, *params, **args):
+        request.encoding = 'UTF-8'
         if request.method == 'POST':
             ret = self.post(request, *params, **args)
             if not ret:

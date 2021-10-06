@@ -9,6 +9,9 @@
 	<link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,700;1,500&display=swap" rel="stylesheet">
 </head>
 <body>
+	<div class="loading">
+		<img src="{% static 'main/loading-spinner.gif' %}" alt="" class="loading__image">
+	</div>
 	<div class="menu">
 		<div class="menu__chat">
 			<a href="{% url 'chat_settings' %}" class="menu__chat-link">
@@ -149,11 +152,13 @@
 		}
 
 		function connect() {
+			$('.loading').addClass('active');
 			ws = new WebSocket('ws://' + window.location.hostname + ':8001');
 			ws.onmessage = function(response) {
 				message = JSON.parse(response.data);
 				if (message.command == 'get_mes') {
-					$('.messages__list')[0].innerHTML += message.data;
+					var elem = new DOMParser().parseFromString(message.data, 'text/html');
+					$('.messages__list')[0].appendChild(elem.body.children[0]);
 					scrollToLastMessage();
 				}
 				if (message.command == 'del') {
@@ -162,7 +167,8 @@
 						last_id = $('.messages__list')[0].children[0];
 				}
 				if (message.command == 'notify_img') {
-					$('.messages__list')[0].innerHTML += message.data;
+					var elem = new DOMParser().parseFromString(message.data, 'text/html');
+					$('.messages__list')[0].appendChild(elem.body.children[0]);
 					var last_message = getLastMessage();
 					last_message.getElementsByTagName('img')[0].onload = scrollToLastMessage;
 				}
@@ -174,10 +180,13 @@
 					$('.messages__list').prepend($(message.data));
 				}
 			}
-			ws.onopen = function() {
+			ws.onopen = function(a) {
+					console.log(a);
+				$('.loading').removeClass('active');
 				ws.send('messenger');
 				data = $.get('/get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data)});
 			}
+			ws.onclose = connect;
 		}
 
 		function dataURLToBlob(dataURL) {
@@ -305,6 +314,7 @@
 		
 	$(document).ready(function() {
 		window.onload = scrollToLastMessage;
+		window.onresize = scrollToLastMessage;
 		$('.messages')[0].onscroll = pullMessages;
 		connect();
 	});

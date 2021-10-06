@@ -19,13 +19,10 @@ from .routine import PageBase
 from .sock.server import run_async
 from .sock.server import get_last_messages
 from .sock.server import WebSocketHandler
-from .sock.server import WebSocketAdmin
 
 
 websocket_server = WebSocketHandler()
 websocket_server.start()
-
-websocket_admin = WebSocketAdmin()
 
 
 class Authorization(PageBase):
@@ -46,7 +43,10 @@ class Authorization(PageBase):
         return super().handle(request, *params, **args)
 
     def post(self, request: HttpRequest, *params, **args):
-        user = authenticate(username=request.POST['username'], password=request.POST['password'])
+        if not request.POST.get('username') and request.POST.get('password'):
+            return self.redirect('login')
+
+        user = authenticate(username=request.POST['username'].strip(), password=request.POST['password'].strip())
         error = self._check_user(request.POST)
         if not error == '' or not user:
             return self.get(request, error)
@@ -61,6 +61,8 @@ class Authorization(PageBase):
 
 class Registration(PageBase):
     def check_user(self, user):
+        if not user.get('username') or not user.get('password') or not user.get('email'):
+            return 'Error during authorization data validation'
         if (user['username'] == '') or (user['username'][0].isdigit()) or (len(user['username']) < 2):
             return "Your name is too short or starts with a digit"
         if (len(user['password']) < 6) or (not user['password'].lower().find(user['username'].lower()) == -1):
@@ -159,15 +161,15 @@ class ChatsHandler(PageBase):
 
 class ChatsCreator(PageBase):
     @staticmethod
-    def check_chat(request):
-        data = request.POST
-        if len(Chat.objects.filter(title=data['title'])) > 0:
-            return 'Chat with this name already exist'
-        if len(data['title']) < 2:
+    def check_chat(title, create=True):
+        if len(title) < 2:
             return 'Chat title must be longer than 2'
-        for ch in data['title']:
-            if not 65 <= ord(ch) <= 122:
+        for ch in title:
+            if not 65 <= ord(ch) <= 122 and not ch == ' ':
                 return 'Chat title must be in english'
+        if create:
+            if len(Chat.objects.filter(title=title)) > 0:
+                return 'Chat with this name already exist'
 
         return None
 
@@ -189,11 +191,12 @@ class ChatsCreator(PageBase):
 
     def post(self, request: HttpRequest, *params, **args):
         author = get_user(request)
+        title = request.POST.get('title', "").strip()
 
-        error = ChatsCreator.check_chat(request)
+        error = ChatsCreator.check_chat(title)
         if not error:
             chat = Chat()
-            chat.title = request.POST.get('title')
+            chat.title = title
             chat.admin = author
             chat.save()
             chat.users.add(author)
@@ -291,6 +294,12 @@ class ChatSettings(PageBase):
         return render(request, 'main/chat_settings.html', context)
 
     def post(self, request: HttpRequest, *params, **args):
+        title = request.POST.get('title', "").strip()
+        if title:
+            error = ChatsCreator.check_chat(title, create=False)
+            if error is not None:
+                return HttpResponse(error)
+
         # Get users to add
         users_ids = []
         for user_id in request.POST.getlist('users[]'):
@@ -303,8 +312,9 @@ class ChatSettings(PageBase):
         messenger_server = websocket_server.get_messenger()
 
         # Rename chat
-        chat_server.rename_chat(args['chat'].title, request.POST.get('title'))
-        args['chat'].title = request.POST.get('title')
+        chat_server.rename_chat(args['chat'].title, title)
+        args['chat'].title = title
+
 
         # Add users to chat
         if users_ids:
@@ -336,4 +346,4 @@ class ChatSettings(PageBase):
                 pass
 
         args['chat'].save()
-        return self.redirect('messages_page', {'chat_name': args['chat'].title})
+        return HttpResponse('')

@@ -279,6 +279,7 @@ class ChatServer:
 	chats = {}
 	connections = []
 	is_monitoring = False
+	lock = threading.Lock()
 
 	def is_monitoring_empty(self):
 		for chat in self.chats:
@@ -286,10 +287,9 @@ class ChatServer:
 				return False
 		return True
 
-	async def notify(self, chat_title):
+	async def notify(self, chat_title, db_message):
 		try:
 			chat_id = await run_sync(lambda: Chat.objects.get(title=chat_title).id)
-			db_message = await run_sync(lambda: Message.objects.filter(chat__title=chat_title).order_by('pk').last())
 
 			if db_message:
 				author_name = await run_sync(lambda: db_message.author.username)
@@ -312,8 +312,6 @@ class ChatServer:
 
 	async def register(self, websocket):
 		msg = await websocket.recv()
-		if msg == SECRET_KEY:
-			return Connection(user='admin', socket=websocket)
 		cookies = parse_cookie(msg)
 
 		user = await get_user(cookies.get('sessionid'))
@@ -343,9 +341,14 @@ class ChatServer:
 		while True:
 			if not self.is_monitoring:
 				break
+			self.lock.acquire()
 			last_check = time.time()
+
 			for chat in self.chats:
-				await self.notify(chat)
+				db_message = await run_sync(lambda: Message.objects.filter(chat__title=chat).order_by('pk').last())
+				await self.notify(chat, db_message)
+
+			self.lock.release()
 			time_to_sleep = 0.5 - (time.time() - last_check)
 			if time_to_sleep > 0:
 				await asyncio.sleep(time_to_sleep)
@@ -355,11 +358,6 @@ class ChatServer:
 	async def handle(self, websocket, path):
 		try:
 			connection = await self.register(websocket)
-			if isinstance(connection.user, str):
-				if connection.user == 'admin':
-					await self.handle_admin(connection)
-					connection = None
-				return
 			if not self.is_monitoring:
 				if not self.is_monitoring_empty():
 					asyncio.get_event_loop().create_task(self.monitor())
@@ -378,19 +376,19 @@ class ChatServer:
 			if connection:
 				await self.unregister(connection)
 
-	async def handle_admin(self, connection):
-		command = await connection.socket.recv()
-		print(command)
-
 	async def remove_user_from_chat(self, user, chat):
-		for connection in self.chats[chat.title]:
-			if connection.user.id == user.id:
-				self.chats[chat.title].remove(connection)
-				await connection.socket.send(json.dumps({
-					'command': 'remove_chat',
-					'chat_id': chat.id,
-				}))
-				return True
+		try:
+			self.lock.acquire()
+			for connection in self.chats[chat.title]:
+				if connection.user.id == user.id:
+					self.chats[chat.title].remove(connection)
+					await connection.socket.send(json.dumps({
+						'command': 'remove_chat',
+						'chat_id': chat.id,
+					}))
+					return True
+		finally:
+			self.lock.release()
 		return False
 
 	async def remove_users_from_chat(self, users, chat):
@@ -399,27 +397,31 @@ class ChatServer:
 				await self.remove_user_from_chat(user, chat)
 
 	async def add_user_to_chat(self, user, chat):
-		for connection in self.connections:
-			if connection.user.id == user.id:
-				last_message = await run_sync(lambda: Message.objects.filter(chat__title=chat.title).order_by('id').last())
-				template = loader.get_template('main/chat.html')
-				data = await run_sync(lambda: str(template.render({
+		try:
+			self.lock.acquire()
+			for connection in self.connections:
+				if connection.user.id == user.id:
+					last_message = await run_sync(lambda: Message.objects.filter(chat__title=chat.title).order_by('id').last())
+					template = loader.get_template('main/chat.html')
+					data = await run_sync(lambda: str(template.render({
 						'chat': chat,
 						'data': last_message,
 					})))
-				await connection.socket.send(json.dumps({
-					'command': 'add_chat',
-					'data': data
-				}))
-				if self.chats.get(chat.title):
-					self.chats[chat.title].append(connection)
-				else:
-					self.chats[chat.title] = [connection]
+					await connection.socket.send(json.dumps({
+						'command': 'add_chat',
+						'data': data
+					}))
+					if self.chats.get(chat.title):
+						self.chats[chat.title].append(connection)
+					else:
+						self.chats[chat.title] = [connection]
 
-				if connection not in self.connections:
-					self.connections.append(connection)
+					if connection not in self.connections:
+						self.connections.append(connection)
 
-				return
+					return
+		finally:
+			self.lock.release()
 
 	def is_user_connected(self, user):
 		for connection in self.connections:
@@ -428,10 +430,14 @@ class ChatServer:
 		return False
 
 	def rename_chat(self, before, now):
-		if self.chats.get(before):
-			connections = self.chats[before]
-			self.chats.pop(before)
-			self.chats[now] = connections
+		try:
+			self.lock.acquire()
+			if self.chats.get(before):
+				connections = self.chats[before]
+				self.chats.pop(before)
+				self.chats[now] = connections
+		finally:
+			self.lock.release()
 
 	def remove_chat(self, chat):
 		if chat.title in self.chats:
@@ -473,17 +479,3 @@ class WebSocketHandler:
 	def get_messenger(self):
 		return self.path.get('messenger')
 
-
-class WebSocketAdmin:
-	def __init__(self):
-		self.loop = asyncio.new_event_loop()
-
-	async def _send(self, msg):
-		async with websockets.connect('ws://127.0.0.1:8001') as chat_client:
-			await chat_client.send('chat')
-			await chat_client.send(SECRET_KEY)
-
-			await chat_client.send(msg)
-
-	def send(self, msg):
-		self.loop.run_until_complete(self._send(msg))

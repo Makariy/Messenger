@@ -31,7 +31,7 @@
                     <div id="csrf_token" style="display: none;">
                         {% csrf_token %}
                     </div>
-                    <input type="text" name="title" value="{{ chat.title }}" required class="form__title" placeholder="Chat name" id="id_name">
+                    <input type="text" name="title" value="{{ chat.title }}" required class="form__title" placeholder="Chat name" id="id_name" {% if chat.admin != user %}readonly{% endif %}>
                     <ul class="form__select">
                         {% for user in users %}
                         <li class="form__select_option">
@@ -42,9 +42,19 @@
                         </li>
                         {% endfor %}
                     </ul>
+                    <div style="display: none; color: red; margin: 5px 0" class="errors">
+                        <p style="margin: 5px 0;" class="errors__error">
+
+                        </p>
+                    </div>
                     <button class="login__submit-button" onclick="sendForm()">
                         <input class="login__submit" type="submit" value="Enter">
                     </button>
+                    <div class="rights" style="margin-top: 5px">
+                        {% if chat.admin != user %}
+                            You cannot modify chat settings because you aren't an admin.
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -91,7 +101,16 @@
                 data:  {'title': document.getElementById('id_name').value,
                         'users[]': users_to_add,
                         'csrfmiddlewaretoken': document.getElementById('csrf_token').children[0].value},
-                success: () => ( document.location = document.location.protocol + "//" + document.location.host)
+                success: function(data) {
+                    if (data != ""){
+                        console.log(data);
+                        $('.errors')[0].style['display'] = 'block';
+                        $('.errors__error')[0].innerText = data;
+                    }
+                    else {
+                        document.location = document.location.protocol + "//" + document.location.host;
+                    }
+                }
             })
         }
         {% endif %}
