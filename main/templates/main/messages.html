@@ -1,5 +1,5 @@
 {% for message in messages %}
-<div class="message" id="{{ message.pk }}">
+<div class="message" id="{{ message.id }}">
   {% if message.type == 'text' %}
     <h4 class="message__author">{{ message.author.username }}</h4>
     <p class="message__inner">{{ message.data.text }}</p>
@@ -7,6 +7,16 @@
   {% if message.type == 'image' %}
     <h4 class="message__author">{{ message.author.username }}</h4>
     <img src="/file_upload?file_id={{ message.id }}" class="message__inner message__image">
+  {% endif %}
+  {% if message.type == 'video' %}
+    <h4 class="message__author">{{ message.author.username }}</h4>
+    <video class="message__inner message__image" controls>
+      <source src="/file_upload?file_id={{ message.id }}">
+    </video>
+  {% endif %}
+  {% if message.type == 'file' %}
+    <h4 class="message__author">{{ message.author.username }}</h4>
+    <a href="/file_upload?file_id={{ message.id }}" class="message__inner message__image" style="color: blue">{{ message.data.file.name }}</a>
   {% endif %}
   <div class="message__actions">
     {% if user.id == message.author.id %}

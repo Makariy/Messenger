@@ -8,7 +8,7 @@
 	<link rel="stylesheet" href="{% static 'main/main.css' %}">
 	<link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,700;1,500&display=swap" rel="stylesheet">
 </head>
-<body>
+<body style="overflow-y: hidden">
 	<div class="loading">
 		<img src="{% static 'main/loading-spinner.gif' %}" alt="" class="loading__image">
 	</div>
@@ -33,20 +33,30 @@
 				<div class="messages">
 					<div class="messages__list">
 						{% for message in messages %}
-						<div class="message" id="{{ message.pk }}">
-							{% if message.type == 'text' %}
+						<div class="message" id="{{ message.id }}">
+						  {% if message.type == 'text' %}
 							<h4 class="message__author">{{ message.author.username }}</h4>
 							<p class="message__inner">{{ message.data.text }}</p>
-							{% endif %}
-							{% if message.type == 'image' %}
+						  {% endif %}
+						  {% if message.type == 'image' %}
 							<h4 class="message__author">{{ message.author.username }}</h4>
 							<img src="/file_upload?file_id={{ message.id }}" class="message__inner message__image">
+						  {% endif %}
+						  {% if message.type == 'video' %}
+							<h4 class="message__author">{{ message.author.username }}</h4>
+							<video class="message__inner message__image" controls>
+								<source src="/file_upload?file_id={{ message.id }}">
+							</video>
+						  {% endif %}
+						  {% if message.type == 'file' %}
+							<h4 class="message__author">{{ message.author.username }}</h4>
+							<a href="/file_upload?file_id={{ message.id }}" class="message__inner message__image" style="color: blue">{{ message.data.file.name }}</a>
+						  {% endif %}
+						  <div class="message__actions">
+							{% if user.id == message.author.id %}
+							  <button class="message__actions-delete" onclick="deleteMessage({{ message.pk }})">Delete</button>
 							{% endif %}
-							<div class="message__actions">
-								{% if user == message.author %}
-								<button class="message__actions-delete" onclick="deleteMessage({{ message.pk }})">Delete</button>
-								{% endif %}
-							</div>
+						  </div>
 						</div>
 						{% endfor %}
 					</div>
@@ -132,14 +142,11 @@
 		function showChosenFile() {
 			var file_input = document.getElementById('sender__inner_file-input');
 			if (file_input.files[0]) {
-				if (!file_input.files[0].name.endsWith('.jpg') && !file_input.files[0].name.endsWith('.png')) 
-					{ ; file_input.value = '' ;return; }
 				window.clearInterval(checking_open_file);
 				checking_open_file = null;
 				document.getElementById('sender__inner_file-show').style['display'] = 'flex';
 				document.getElementById('sender__inner_file-show--file').innerHTML = file_input.files[0].name;
 				document.getElementById('sender__inner_file-show--button').style['display'] = 'block';
-
 			}
 		}
 
@@ -166,7 +173,7 @@
 					if (message.data == last_id) 
 						last_id = $('.messages__list')[0].children[0];
 				}
-				if (message.command == 'notify_img') {
+				if (message.command == 'notify_file') {
 					var elem = new DOMParser().parseFromString(message.data, 'text/html');
 					$('.messages__list')[0].appendChild(elem.body.children[0]);
 					var last_message = getLastMessage();
@@ -252,7 +259,26 @@
 		}
 
 		function sendFile(file) {
-			loadFileDownscaled(file);
+			var image_ext = ['.jpg', 'jpeg', '.png', '.tiff', '.heic'];
+			for (var ext in image_ext){
+				if (file.name.endsWith(image_ext[ext])){
+					loadFileDownscaled(file);
+					return;
+				}
+			}
+
+			var fd = new FormData();
+			fd.append('file', file);
+			fd.append('file_title', file.name)
+
+			$.ajax({
+				url: '/file_upload/',
+				type: 'post',
+				data: fd,
+				contentType: false,
+				processData: false,
+			});
+			removeChosenFile();
 		}
 
 		$(document).on('imageReady', function(event) {
@@ -278,7 +304,8 @@
 			else {
 				var input = document.getElementById('sender__inner_input_message');
 				var message = input.value;
-				if (message == '') {return;} 
+				if (message == '') {return;}
+				if (message.length > 1024) {alert("Message length is greater than 1024, please reduce it"); return;}
 				input.value = '';
 				ws.send(JSON.stringify({
 					'command': 'send_mes',
@@ -288,12 +315,13 @@
 		}
 
 		function deleteMessage(id) {
+			var message = $('#' + id)[0];
+			message.innerHTML = '';
 			ws.send(JSON.stringify({
 				'command': 'del',
 				'data': id,
 			}));
 		}
-
 
 		function pullMessages() {
 			var messages = $('.messages__list')[0];

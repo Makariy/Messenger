@@ -3,7 +3,9 @@ from django.http import HttpRequest, HttpResponse, FileResponse
 
 from django.urls import reverse_lazy
 from django.shortcuts import redirect
+
 from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ValidationError
 
 from django.views.decorators.csrf import csrf_exempt
 
@@ -13,12 +15,15 @@ from django.contrib.auth import get_user, authenticate, login, logout
 from .models import Message
 from .models import MessageData
 from .models import Chat
+from .models import UserValidator
+
 
 from .routine import PageBase
 
-from .sock.server import run_async
-from .sock.server import get_last_messages
 from .sock.server import WebSocketHandler
+
+from .db_services import *
+from .messages_service import *
 
 
 websocket_server = WebSocketHandler()
@@ -26,16 +31,6 @@ websocket_server.start()
 
 
 class Authorization(PageBase):
-    def _check_user(self, data):
-        try:
-            user = User.objects.get(username=data.get('username'))
-            if not user.check_password(data.get('password')):
-                return 'Incorrect password'
-            else:
-                return ''
-        except:
-            return 'User with this name doesn\'t exist'
-
     def handle(self, request: HttpRequest, *params, **args):
         user = get_user(request)
         if user and not user.is_anonymous:
@@ -46,10 +41,13 @@ class Authorization(PageBase):
         if not request.POST.get('username') and request.POST.get('password'):
             return self.redirect('login')
 
-        user = authenticate(username=request.POST['username'].strip(), password=request.POST['password'].strip())
-        error = self._check_user(request.POST)
-        if not error == '' or not user:
-            return self.get(request, error)
+        data = {}
+        for key in request.POST.keys():
+            data[key] = request.POST[key].strip()
+
+        user = authenticate(username=data['username'], password=data['password'])
+        if not user:
+            return self.get(request, 'Invalid credentials')
 
         login(request, user)
         return self.redirect('messages_page')
@@ -60,19 +58,6 @@ class Authorization(PageBase):
 
 
 class Registration(PageBase):
-    def check_user(self, user):
-        if not user.get('username') or not user.get('password') or not user.get('email'):
-            return 'Error during authorization data validation'
-        if (user['username'] == '') or (user['username'][0].isdigit()) or (len(user['username']) < 2):
-            return "Your name is too short or starts with a digit"
-        if (len(user['password']) < 6) or (not user['password'].lower().find(user['username'].lower()) == -1):
-            return "Your password is too short or contains your name"
-        if User.objects.filter(username=user['username']).count() > 0:
-            return "This name is already used"
-        if User.objects.filter(email=user['email']).count() > 0:
-            return "This mail is already used"
-        return ''
-
     def handle(self, request: HttpRequest, *params, **args):
         user = get_user(request)
         if user and not user.is_anonymous:
@@ -80,12 +65,15 @@ class Registration(PageBase):
         return super().handle(request, *params, **args)
 
     def post(self, request, *params, **args):
-        data = request.POST
-        error = self.check_user(request.POST)
-        if not error == '':
-            return self.get(request, error)
+        data = {}
+        for key in request.POST.keys():
+            data[key] = request.POST[key].strip()
 
-        user = User.objects.create_user(username=data['username'], password=data['password'], email=data['email'])
+        try:
+            user = create_user_by_params(username=data['username'], password=data['password'], email=data['email'])
+        except ValidationError as e:
+            return self.get(request, e.message)
+
         login(request, user)
         return self.redirect('messages_page')
 
@@ -108,14 +96,16 @@ class MessagesPage(PageBase):
         return self.redirect('login')
 
     def get(self, request, *params, **args):
-        chat_title = request.COOKIES.get('chat_name')
-        if not chat_title:
+        chat_id = request.COOKIES.get('chat_id')
+        if not chat_id:
             return self.redirect('chats_handler')
         try:
-            chat = Chat.objects.get(title=chat_title)
+            chat = get_chat_by_params(id=int(chat_id))
+            if not chat:
+                raise ValueError
             if args['user'] not in chat.users.all():
-                return self.redirect('chats_handler', {'chat_name': None})
-        except ObjectDoesNotExist:
+                return self.redirect('chats_handler', {'chat_id': None})
+        except ValueError:
             return self.redirect('chats_handler')
         messages = get_last_messages(chat=chat)
         context = {'messages': messages, 'user': args['user']}
@@ -133,22 +123,22 @@ class ChatsHandler(PageBase):
         action = request.GET.get('action')
 
         if action == 'exit_chat':
-            return self.redirect('messages_page', {'chat_name': None})
+            return self.redirect('messages_page', {'chat_id': None})
 
         if action == 'exit':
             logout(request)
-            return self.redirect('messages_page', {'chat_name': None})
+            return self.redirect('messages_page', {'chat_id': None})
 
         if action == 'get_chat':
-            return self.redirect('messages_page', {'chat_name': request.GET.get('chat_name')})
+            return self.redirect('messages_page', {'chat_id': request.GET.get('chat_id')})
 
         if action == 'create_chat':
             return self.redirect('create_chat')
 
         if not action:
             user = get_user(request)
-            chats = Chat.objects.filter(users__username=user.username)
-            last_messages = [Message.objects.filter(chat=chat).order_by('pk').last() for chat in chats]
+            chats = filter_chat_by_params(users__id=user.id)
+            last_messages = get_last_chats_messages(chats)
 
             display = []
             for i in range(len(chats)):
@@ -161,22 +151,9 @@ class ChatsHandler(PageBase):
 
 class ChatsCreator(PageBase):
     @staticmethod
-    def check_chat(title, create=True):
-        if len(title) < 2:
-            return 'Chat title must be longer than 2'
-        for ch in title:
-            if not 65 <= ord(ch) <= 122 and not ch == ' ':
-                return 'Chat title must be in english'
-        if create:
-            if len(Chat.objects.filter(title=title)) > 0:
-                return 'Chat with this name already exist'
-
-        return None
-
-    @staticmethod
     def get_users_to_invite(request):
         now_user = get_user(request)
-        users = list(User.objects.all())
+        users = list(get_all_users())
         users.remove(now_user)
         return users
 
@@ -193,29 +170,22 @@ class ChatsCreator(PageBase):
         author = get_user(request)
         title = request.POST.get('title', "").strip()
 
-        error = ChatsCreator.check_chat(title)
-        if not error:
-            chat = Chat()
-            chat.title = title
-            chat.admin = author
-            chat.save()
-            chat.users.add(author)
+        if title:
+            users = []
             users_id = request.POST.getlist('users[]')
             for user_id in users_id:
                 try:
-                    user = User.objects.get(id=int(user_id))
-                    chat.users.add(user)
-
-                    if websocket_server.get_chat().is_user_connected(user):
-                        run_async(websocket_server.get_chat().add_user_to_chat(user, chat))
-
-                except ObjectDoesNotExist:
-                    pass
+                    users.append(get_user_by_params(id=int(user_id)))
                 except ValueError:
                     pass
+            try:
+                create_chat_by_params(title=title, admin=author, users=users)
+            except ValidationError as e:
+                return HttpResponse(e.message)
+
             return HttpResponse()
 
-        return HttpResponse(error)
+        return HttpResponse()
 
 
 class UserSettings(PageBase):
@@ -233,10 +203,10 @@ class FileHandler(PageBase):
     def handle(self, request: HttpRequest, *params, **args):
         try:
             user = get_user(request)
-            chat = Chat.objects.get(title=request.COOKIES.get('chat_name'))
-        except ObjectDoesNotExist:
+            chat = get_chat_by_params(id=int(request.COOKIES.get('chat_id')))
+        except (ObjectDoesNotExist, ValueError):
             return self.redirect('messages_page')
-        if (not user) or (user.is_anonymous) or (chat not in Chat.objects.filter(users=user)):
+        if not user or user.is_anonymous or (chat not in filter_chat_by_params(users=user)):
             return self.redirect('messages_page')
         args['user'] = user
         args['chat'] = chat
@@ -247,24 +217,34 @@ class FileHandler(PageBase):
         file_title = request.POST.get('file_title')
 
         md = MessageData()
-        md.image.save(file_title, file)
-        message = Message(author=args['user'], chat=args['chat'], data=md, type='image')
+        md.file.save(file_title, file)
+
+        message = None
+        for form in ('.jpg', 'jpeg', '.png', '.tiff', '.heic'):
+            if file_title.endswith(form):
+                message = Message(author=args['user'], chat=args['chat'], data=md, type='image')
+        for form in ('.mp4', '.webm', '.avi', '.mov', '.ogg', '.ogv'):
+            if file_title.endswith(form):
+                message = Message(author=args['user'], chat=args['chat'], data=md, type='video')
+        if not message:
+            message = Message(author=args['user'], chat=args['chat'], data=md, type='file')
+
         message.save()
-        run_async(websocket_server.get_messenger().notify_img(args['user'], args['chat'], message.id))
+        run_async(websocket_server.get_messenger().notify_file(args['user'], args['chat'], message.id))
         return HttpResponse('')
 
     def get(self, request: HttpRequest, *params, **args):
-        image = Message.objects.get(id=int(request.GET.get('file_id'))).data.image
-        return FileResponse(image.file)
+        file = Message.objects.get(id=int(request.GET.get('file_id'))).data.file
+        return FileResponse(file.file)
 
 
 class ChatSettings(PageBase):
     def handle(self, request: HttpRequest, *params, **args):
         user = get_user(request)
-        chat_title = request.COOKIES.get('chat_name')
+        chat_id = request.COOKIES.get('chat_id')
         try:
-            chat = Chat.objects.get(title=chat_title)
-        except ObjectDoesNotExist:
+            chat = get_chat_by_params(id=int(chat_id))
+        except (ObjectDoesNotExist, ValueError):
             chat = None
 
         if user and not user.is_anonymous and chat:
@@ -279,11 +259,8 @@ class ChatSettings(PageBase):
         action = request.GET.get('action')
         if action == 'delete':
             if args['chat'].admin == args['user']:
-                websocket_server.get_chat().remove_chat(args['chat'])
-                websocket_server.get_messenger().remove_chat(args['chat'])
-                args['chat'].delete()
-
-                return self.redirect('messages_page', {'chat_name': None})
+                delete_chat(args['chat'])
+                return self.redirect('messages_page', {'chat_id': None})
 
         users = ChatsCreator.get_users_to_invite(request)
         users_to_invite = ''
@@ -295,55 +272,22 @@ class ChatSettings(PageBase):
 
     def post(self, request: HttpRequest, *params, **args):
         title = request.POST.get('title', "").strip()
-        if title:
-            error = ChatsCreator.check_chat(title, create=False)
-            if error is not None:
-                return HttpResponse(error)
+        if not title:
+            return HttpResponse('')
 
         # Get users to add
-        users_ids = []
+        users = []
         for user_id in request.POST.getlist('users[]'):
             try:
-                users_ids.append(int(user_id))
+                user = get_user_by_params(id=int(user_id))
+                if user:
+                    users.append(user)
             except ValueError:
                 pass
 
-        chat_server = websocket_server.get_chat()
-        messenger_server = websocket_server.get_messenger()
+        try:
+            update_chat(args['chat'], title, args['user'], users)
+        except ValidationError as e:
+            return HttpResponse(e.message)
 
-        # Rename chat
-        chat_server.rename_chat(args['chat'].title, title)
-        args['chat'].title = title
-
-
-        # Add users to chat
-        if users_ids:
-            for user_id in users_ids:
-                try:
-                    user = User.objects.get(id=user_id)
-                    if user not in args['chat'].users.all():
-                        args['chat'].users.add(user)
-                        # If user is connected to chat_server, then notify him about new chat
-                        if chat_server.is_user_connected(user):
-                            run_async(chat_server.add_user_to_chat(user, args['chat']))
-
-                except ObjectDoesNotExist:
-                    pass
-
-        # Remove users
-        for user in args['chat'].users.all():
-            try:
-                if (user.id not in users_ids) and (not user.id == args['user'].id):
-                    args['chat'].users.remove(user)
-                    # If user is connected to messenger_server, then stop notifying him
-                    if messenger_server.is_user_connected(user):
-                        run_async(messenger_server.remove_user_from_chat(user, args['chat']))
-                    # If user is connected to chat_server, then stop notifying him
-                    if chat_server.is_user_connected(user):
-                        run_async(chat_server.remove_user_from_chat(user, args['chat']))
-
-            except ObjectDoesNotExist:
-                pass
-
-        args['chat'].save()
         return HttpResponse('')
