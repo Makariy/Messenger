@@ -1,33 +1,19 @@
 from django.shortcuts import render
 from django.http import HttpRequest, HttpResponse, FileResponse
 
+from django.contrib.auth import get_user, authenticate, login, logout
 from django.urls import reverse_lazy
 from django.shortcuts import redirect
 
-from django.core.exceptions import ObjectDoesNotExist
-from django.core.exceptions import ValidationError
-
 from django.views.decorators.csrf import csrf_exempt
 
-from django.contrib.auth.models import User
-from django.contrib.auth import get_user, authenticate, login, logout
-
-from .models import Message
-from .models import MessageData
-from .models import Chat
-from .models import UserValidator
-
-
 from .routine import PageBase
-
-from .sock.server import WebSocketHandler
 
 from .db_services import *
 from .messages_service import *
 
 
 websocket_server = WebSocketHandler()
-websocket_server.start()
 
 
 class Authorization(PageBase):
@@ -286,7 +272,7 @@ class ChatSettings(PageBase):
                 pass
 
         try:
-            update_chat(args['chat'], title, args['user'], users)
+            update_chat(args['chat'], title, users)
         except ValidationError as e:
             return HttpResponse(e.message)
 

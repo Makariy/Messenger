@@ -188,7 +188,7 @@
 				}
 			}
 			ws.onopen = function(a) {
-					console.log(a);
+				console.log(a);
 				$('.loading').removeClass('active');
 				ws.send('messenger');
 				data = $.get('/get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data)});
@@ -316,7 +316,9 @@
 
 		function deleteMessage(id) {
 			var message = $('#' + id)[0];
-			message.innerHTML = '';
+			if (message.children[1].tagName == 'VIDEO') {
+				message.children[1].children[0].src = "";
+			}
 			ws.send(JSON.stringify({
 				'command': 'del',
 				'data': id,

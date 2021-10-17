@@ -1,6 +1,4 @@
-import asyncio
-
-from .sock.server import WebSocketHandler, run_async, run_sync
+from .sock.server import WebSocketHandler, run_async
 
 from django.contrib.auth.models import User
 from .models import Chat, Message, MessageData
@@ -8,7 +6,6 @@ from .models import UserValidator, ChatValidator
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.exceptions import ValidationError
-from django.contrib.auth import get_user, authenticate, login, logout
 
 
 websocket_server = WebSocketHandler()
@@ -68,12 +65,12 @@ def create_user_by_params(*args, **kwargs):
 
 def create_chat_by_params(title, admin, users):
     """Creates chat by params"""
-    chat = Chat(title=title, admin=admin)
     try:
+        chat = Chat(title=title, admin=admin)
         ChatValidator.validate_chat(chat)
+        chat.save()
     except ValidationError as e:
         raise e
-    chat.save()
     chat.users.add(admin)
     for user in users:
         chat.users.add(user)
@@ -85,12 +82,13 @@ def create_chat_by_params(title, admin, users):
     return chat
 
 
-def create_message_data(**kwargs):
+def create_message_data_by_params(**kwargs):
     """Creates message data <main.models.MessageData>, if message data is not
     valid, raises validataion exception"""
     try:
         md = MessageData(**kwargs)
         md.save()
+        return md
     except ValidationError as e:
         raise e
 
@@ -101,6 +99,7 @@ def create_message_by_params(*args, **kwargs):
     try:
         message = Message(*args, **kwargs)
         message.save()
+        return message
     except ValidationError as e:
         raise e
 
@@ -126,12 +125,12 @@ def filter_message_by_params(**kwargs):
 def delete_chat(chat: Chat):
     """Deletes chat. IMPORTANT!!! DOES NOT CHECK IF ADMIN IS DELETING
     THIS CHAT, so check it before calling this function"""
-    websocket_server.get_chat().remove_chat(chat)
-    websocket_server.get_messenger().remove_chat(chat)
+    websocket_server.get_chat().remove_chat(chat.id, list(chat.users.all()))
+    websocket_server.get_messenger().remove_chat(chat.id, list(chat.users.all()))
     chat.delete()
 
 
-def update_chat(chat, title, admin, users):
+def update_chat(chat, title, users):
     """Sets chat's properties to values specified in kwargs,
     if new values are not valid, raises ValidationError"""
     chat_server = websocket_server.get_chat()
@@ -159,7 +158,7 @@ def update_chat(chat, title, admin, users):
     # Remove users
     for user in chat.users.all():
         try:
-            if (user not in users) and (not user.id == admin.id):
+            if (user not in users) and (not user.id == chat.admin.id):
                 chat.users.remove(user)
                 # If user is connected to messenger_server, then stop notifying him
                 if messenger_server.is_user_connected(user):

@@ -1,8 +1,9 @@
+import os
+
 from django.db import models
 from django.contrib.auth.models import User
 
 from django.core.validators import ValidationError
-import os
 
 # Create your models here.
 
@@ -23,12 +24,6 @@ class Message(models.Model):
 
     def delete(self, *args, **kwargs):
         self.data.delete()
-        if self.type == 'video':
-            file_name = self.data.file.name
-            if file_name:
-                path = os.path.join(os.getcwd(), 'main/users_images/' + self.data.file.name)
-                if not os.path.exists(path):
-                    os.remove(path)
         super().delete(*args, **kwargs)
 
     def __str__(self):

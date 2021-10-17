@@ -1,4 +1,5 @@
 import asyncio
+import os
 import threading
 import websockets
 import json
@@ -98,14 +99,14 @@ class MessageServer():
 		if connection:
 			await connection.socket.close()
 
-	async def remove_user_from_chat(self, user=None, chat=None, connection=None, code='DISCONNECTED'):
-		if user and chat:
-			connection = await self.get_connection_by_user(user, chat.id)
+	async def remove_user_from_chat(self, user=None, chat_id=None, connection=None, code='DISCONNECTED'):
+		if user and chat_id:
+			connection = await self.get_connection_by_user(user, chat_id)
 
-		if not chat:
+		if not chat_id:
 			chat = await self.get_chat_by_connection(connection)
 		if connection in self.chats[chat.id]:
-			self.chats[chat.id].remove(connection)
+			self.chats[chat_id].remove(connection)
 
 		if connection:
 			await connection.socket.send(json.dumps({
@@ -175,7 +176,7 @@ class MessageServer():
 					'data': str(html_file)
 				}))
 		except Exception as e:
-			print('Error during notifying img: ', str(e))
+			print('Error during notifying file: ', str(e))
 
 	async def handle(self, websocket, path):
 		connection = None
@@ -229,14 +230,14 @@ class MessageServer():
 					return True
 		return False
 
-	async def remove_users_from_chat(self, users, chat):
+	async def remove_users_from_chat(self, users, chat_id):
 		for user in users:
-			await self.remove_user_from_chat(user, chat)
+			await self.remove_user_from_chat(user, chat_id)
 
-	def remove_chat(self, chat):
-		if chat.id in self.chats:
-			run_async(self.remove_users_from_chat(list(chat.users.all()), chat))
-			self.chats.pop(chat.id)
+	def remove_chat(self, chat_id: int, users: list):
+		if chat_id in self.chats:
+			run_async(self.remove_users_from_chat(users, chat_id))
+			self.chats.pop(chat_id)
 
 
 class ChatServer:
@@ -337,25 +338,25 @@ class ChatServer:
 			if connection:
 				await self.unregister(connection)
 
-	async def remove_user_from_chat(self, user, chat):
+	async def remove_user_from_chat(self, user, chat_id):
 		try:
 			self.lock.acquire()
-			for connection in self.chats[chat.id]:
+			for connection in self.chats[chat_id]:
 				if connection.user.id == user.id:
-					self.chats[chat.id].remove(connection)
+					self.chats[chat_id].remove(connection)
 					await connection.socket.send(json.dumps({
 						'command': 'remove_chat',
-						'chat_id': chat.id,
+						'chat_id': chat_id,
 					}))
 					return True
 		finally:
 			self.lock.release()
 		return False
 
-	async def remove_users_from_chat(self, users, chat):
+	async def remove_users_from_chat(self, users, chat_id):
 		for user in users:
 			if self.is_user_connected(user):
-				await self.remove_user_from_chat(user, chat)
+				await self.remove_user_from_chat(user, chat_id)
 
 	async def add_user_to_chat(self, user, chat):
 		try:
@@ -400,10 +401,10 @@ class ChatServer:
 		finally:
 			self.lock.release()
 
-	def remove_chat(self, chat):
-		if chat.id in self.chats:
-			run_async(self.remove_users_from_chat(list(chat.users.all()), chat))
-			connections = self.chats.pop(chat.id)
+	def remove_chat(self, chat_id: int, users: list):
+		if chat_id in self.chats:
+			run_async(self.remove_users_from_chat(users=users, chat_id=chat_id))
+			connections = self.chats.pop(chat_id)
 			for connection in connections:
 				self.connections.remove(connection)
 
@@ -431,6 +432,8 @@ class WebSocketHandler(SingleWebSocketHandler):
 			await server.handle(websocket, path)
 
 	def start(self):
+		if os.environ.get('RUN_MAIN', None) != 'true':
+			return
 		if not self.server_thread.is_alive():
 			self.server_thread.start()
 
