@@ -158,6 +158,10 @@
 
 		}
 
+		function checkLinkInMessage(message) {
+			message.innerHTML = message.innerHTML.replaceAll(/(http?s:\/\/[^ ,:;'"\{\}\[\]\(\)<>]+)/g, '<a href="$1" style="color: blue">$1</a>');
+		}
+
 		function connect() {
 			$('.loading').addClass('active');
 			ws = new WebSocket('ws://' + window.location.hostname + ':8001');
@@ -166,6 +170,9 @@
 				if (message.command == 'get_mes') {
 					var elem = new DOMParser().parseFromString(message.data, 'text/html');
 					$('.messages__list')[0].appendChild(elem.body.children[0]);
+					var last_message = getLastMessage();
+					var message = last_message.children[1];
+					checkLinkInMessage(message)
 					scrollToLastMessage();
 				}
 				if (message.command == 'del') {
@@ -176,8 +183,16 @@
 				if (message.command == 'notify_file') {
 					var elem = new DOMParser().parseFromString(message.data, 'text/html');
 					$('.messages__list')[0].appendChild(elem.body.children[0]);
-					var last_message = getLastMessage();
-					last_message.getElementsByTagName('img')[0].onload = scrollToLastMessage;
+					if (message.type == 'image'){
+						var last_message = getLastMessage();
+						last_message.style['height'] = '50vh';
+						last_message.style['width'] = '50vw';
+						last_message.getElementsByTagName('img')[0].onload = function() {
+							last_message.style['height'] = 'auto';
+							last_message.style['width'] = 'auto';
+							scrollToLastMessage();
+						};
+					}
 				}
 				if (message.command == 'disconnect') {
 					document.location.href = document.location.protocol  + '//' + document.location.host 
@@ -341,11 +356,17 @@
 			}));
 		}
 
-		
+
 	$(document).ready(function() {
 		window.onload = scrollToLastMessage;
 		window.onresize = scrollToLastMessage;
 		$('.messages')[0].onscroll = pullMessages;
+		var messages = $('.messages__list')[0].children;
+		for (var index = 0; index < messages.length; index+=1) {
+			if (messages[index].children[1].tagName == 'P') {
+				checkLinkInMessage(messages[index].children[1]);
+			}
+		}
 		connect();
 	});
 

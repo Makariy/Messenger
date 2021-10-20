@@ -9,7 +9,6 @@ from websockets.exceptions import ConnectionClosedOK
 from django.core.exceptions import ObjectDoesNotExist
 from django.http.cookie import parse_cookie
 from django.template import loader
-from django.shortcuts import render
 
 from django.contrib.auth.models import User
 from django.contrib.sessions.models import Session
@@ -41,10 +40,15 @@ class Connection:
 	socket = None
 
 
-async def get_user(session_id):
+async def get_user(session_id: str) -> User:
 	session = await run_sync(lambda: Session.objects.get(session_key=session_id))
 	user = await run_sync(lambda: User.objects.get(id=session.get_decoded().get('_auth_user_id')))
 	return user
+
+
+async def get_session_data(session_id: str) -> dict:
+	session = await run_sync(lambda: Session.objects.get(session_key=session_id))
+	return session.get_decoded()
 
 
 class MessageServer():
@@ -67,19 +71,29 @@ class MessageServer():
 			'del': self.delete,
 		}
 
+	async def get_client(self, cookies) -> tuple:
+		try:
+			user = await get_user(cookies['sessionid'])
+		except ObjectDoesNotExist:
+			raise self.RegistrationError('User with this name doesn\'t exist')
+		session_data = await get_session_data(cookies.get('sessionid'))
+		try:
+			chat = await run_sync(lambda: Chat.objects.get(id=session_data['chat_id']))
+		except ObjectDoesNotExist:
+			raise self.RegistrationError('Chat with this name doesn\'t exist')
+
+		return user, chat
+
+	async def is_user_in_chat(self, user, chat):
+		return chat in await run_sync(lambda: tuple(Chat.objects.filter(users__id=user.id)))
+
 	async def _register(self, websocket):
 		try:
 			cookies = parse_cookie(await websocket.recv())
-
-			try: 	user = await get_user(cookies['sessionid'])
-			except ObjectDoesNotExist: raise self.RegistrationError('User with this name doesn\'t exist')
-			try: 	chat = await run_sync(lambda: Chat.objects.get(id=cookies.get('chat_id')))
-			except ObjectDoesNotExist: raise self.RegistrationError('Chat with this name doesn\'t exist')
-
-			chats = await run_sync(lambda: tuple(Chat.objects.filter(users__id=user.id)))
+			user, chat = await self.get_client(cookies)
 
 			# Add user to correct chat query
-			if chat in chats:
+			if await self.is_user_in_chat(user, chat):
 				connection = Connection(user=user, socket=websocket)
 				if not self.chats.get(chat.id):
 					self.chats[chat.id] = [connection,]
@@ -105,7 +119,7 @@ class MessageServer():
 
 		if not chat_id:
 			chat = await self.get_chat_by_connection(connection)
-		if connection in self.chats[chat.id]:
+		if connection in self.chats[chat_id]:
 			self.chats[chat_id].remove(connection)
 
 		if connection:
@@ -258,8 +272,13 @@ class ChatServer:
 				author_name = await run_sync(lambda: db_message.author.username)
 				if db_message.type == 'text':
 					message = await run_sync(lambda: db_message.data.text)
-				else:
+				elif db_message.type == 'image':
 					message = 'Photo'
+				elif db_message.type == 'file':
+					message = 'File'
+				elif db_message.type == 'video':
+					message = 'Video'
+
 				data = str(author_name) + ': ' + str(message)
 			else:
 				data = 'There are no messages right now. You can be first to write something!'

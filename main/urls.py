@@ -11,23 +11,14 @@ from .views import FileHandler
 from .views import ChatSettings
 
 
-messages_page = MessagesPage()
-authorization_page = Authorization()
-registration_page = Registration()
-chats_handler = ChatsHandler()
-chats_creator = ChatsCreator()
-user_settings = UserSettings()
-file_handler = FileHandler()
-chat_settings = ChatSettings()
-
 urlpatterns = [
-	path('', messages_page.handle, name='messages_page'),
-	path('login/', authorization_page.handle, name='login'),
-	path('signup/', registration_page.handle, name='signup'),
-	path('chats/', chats_handler.handle, name='chats_handler'),
-	path('create/', chats_creator.handle, name='create_chat'),
-	path('user_settings/', user_settings.handle, name='user_settings'),
+	path('', MessagesPage.as_view(), name='messages_page'),
+	path('login/', Authorization.as_view(), name='login'),
+	path('signup/', Registration.as_view(), name='signup'),
+	path('chats/', ChatsHandler.as_view(), name='chats_handler'),
+	path('create/', ChatsCreator.as_view(), name='create_chat'),
+	path('user_settings/', UserSettings.as_view(), name='user_settings'),
 	path('get_session_id/', request_session_id, name='session_id'),
-	path('file_upload/', file_handler.handle, name='file_handler'),
-	path('chat_settings/', chat_settings.handle, name='chat_settings'),
+	path('file_upload/', FileHandler.as_view(), name='file_handler'),
+	path('chat_settings/', ChatSettings.as_view(), name='chat_settings'),
 ]

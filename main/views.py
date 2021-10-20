@@ -1,9 +1,14 @@
 from django.shortcuts import render
-from django.http import HttpRequest, HttpResponse, FileResponse
+from django.http import HttpRequest, HttpResponse, FileResponse, HttpResponseBadRequest
+from django.views.generic import View
+
 
 from django.contrib.auth import get_user, authenticate, login, logout
 from django.urls import reverse_lazy
 from django.shortcuts import redirect
+
+from django.contrib.auth.decorators import login_required
+from django.utils.decorators import method_decorator
 
 from django.views.decorators.csrf import csrf_exempt
 
@@ -16,16 +21,16 @@ from .messages_service import *
 websocket_server = WebSocketHandler()
 
 
-class Authorization(PageBase):
-    def handle(self, request: HttpRequest, *params, **args):
+class Authorization(View):
+    def dispatch(self, request: HttpRequest, *params, **args):
         user = get_user(request)
         if user and not user.is_anonymous:
             return redirect(reverse_lazy('messages_page'))
-        return super().handle(request, *params, **args)
+        return super().dispatch(request, *params, **args)
 
     def post(self, request: HttpRequest, *params, **args):
         if not request.POST.get('username') and request.POST.get('password'):
-            return self.redirect('login')
+            return redirect('login')
 
         data = {}
         for key in request.POST.keys():
@@ -36,19 +41,19 @@ class Authorization(PageBase):
             return self.get(request, 'Invalid credentials')
 
         login(request, user)
-        return self.redirect('messages_page')
+        return redirect('messages_page')
 
     def get(self, request: HttpRequest, *params, **args):
         context = {'error': params[0] if not params == () else ''}
         return HttpResponse(render(request, 'main/login.html', context))
 
 
-class Registration(PageBase):
-    def handle(self, request: HttpRequest, *params, **args):
+class Registration(View):
+    def dispatch(self, request: HttpRequest, *params, **args):
         user = get_user(request)
         if user and not user.is_anonymous:
             return redirect(reverse_lazy('messages_page'))
-        return super().handle(request, *params, **args)
+        return super().dispatch(request, *params, **args)
 
     def post(self, request, *params, **args):
         data = {}
@@ -61,65 +66,62 @@ class Registration(PageBase):
             return self.get(request, e.message)
 
         login(request, user)
-        return self.redirect('messages_page')
+        return redirect('messages_page')
 
     def get(self, request, *params, **args):
         context = {'error': params[0] if not params == () else ''}
         return render(request, 'main/signup.html', context)
 
 
+@login_required
 def request_session_id(request):
     return HttpResponse(request.COOKIES.get('sessionid'))
 
 
-class MessagesPage(PageBase):
-    def handle(self, request, *params, **args):
-        user = get_user(request)
-        if user and not user.is_anonymous:
-            args['user'] = user
-            return super().handle(request, *params, **args)
-
-        return self.redirect('login')
+class MessagesPage(View):
+    @method_decorator(login_required)
+    def dispatch(self, request, *params, **args):
+        args['user'] = get_user(request)
+        return super().dispatch(request, *params, **args)
 
     def get(self, request, *params, **args):
-        chat_id = request.COOKIES.get('chat_id')
+        chat_id = request.session.get('chat_id')
         if not chat_id:
-            return self.redirect('chats_handler')
+            return redirect('chats_handler')
         try:
             chat = get_chat_by_params(id=int(chat_id))
             if not chat:
                 raise ValueError
             if args['user'] not in chat.users.all():
-                return self.redirect('chats_handler', {'chat_id': None})
+                request.session['chat_id'] = None
+                return redirect('chats_handler')
         except ValueError:
-            return self.redirect('chats_handler')
+            return redirect('chats_handler')
         messages = get_last_messages(chat=chat)
         context = {'messages': messages, 'user': args['user']}
         return render(request, 'main/index.html', context)
 
 
-class ChatsHandler(PageBase):
-    def handle(self, request: HttpRequest, *params, **args):
-        user = get_user(request)
-        if user and not user.is_anonymous:
-            return super().handle(request, *params, **args)
-        return self.redirect('messages_page')
-
+@method_decorator(login_required, name='dispatch')
+class ChatsHandler(View):
     def get(self, request: HttpRequest, *params, **args):
         action = request.GET.get('action')
 
         if action == 'exit_chat':
-            return self.redirect('messages_page', {'chat_id': None})
+            request.session['chat_id'] = None
+            return redirect('messages_page')
 
         if action == 'exit':
             logout(request)
-            return self.redirect('messages_page', {'chat_id': None})
+            request.session['chat_id'] = None
+            return redirect('messages_page')
 
         if action == 'get_chat':
-            return self.redirect('messages_page', {'chat_id': request.GET.get('chat_id')})
+            request.session['chat_id'] = request.GET.get('chat_id')
+            return redirect('messages_page')
 
         if action == 'create_chat':
-            return self.redirect('create_chat')
+            return redirect('create_chat')
 
         if not action:
             user = get_user(request)
@@ -135,18 +137,14 @@ class ChatsHandler(PageBase):
         return HttpResponse('')
 
 
-class ChatsCreator(PageBase):
+@method_decorator(login_required, name='dispatch')
+class ChatsCreator(View):
     @staticmethod
     def get_users_to_invite(request):
         now_user = get_user(request)
         users = list(get_all_users())
         users.remove(now_user)
         return users
-
-    def handle(self, request: HttpRequest, *params, **args):
-        if not get_user(request).is_anonymous:
-            return super().handle(request, *params, **args)
-        return redirect(reverse_lazy('messages_page'))
 
     def get(self, request: HttpRequest, *params, **args):
         users = ChatsCreator.get_users_to_invite(request)
@@ -174,7 +172,8 @@ class ChatsCreator(PageBase):
         return HttpResponse()
 
 
-class UserSettings(PageBase):
+@method_decorator(login_required, name='dispatch')
+class UserSettings(View):
     def get(self, request: HttpRequest, *params, **args):
         try:
             user = get_user(request)
@@ -184,23 +183,30 @@ class UserSettings(PageBase):
         return render(request, 'main/user_settings.html', {'user': user})
 
 
-class FileHandler(PageBase):
-    @csrf_exempt
-    def handle(self, request: HttpRequest, *params, **args):
+class FileHandler(View):
+    @method_decorator(csrf_exempt)
+    @method_decorator(login_required)
+    def dispatch(self, request: HttpRequest, *params, **args):
+        user = get_user(request)
+        if not user or user.is_anonymous:
+            return redirect('messages_page')
+
         try:
-            user = get_user(request)
-            chat = get_chat_by_params(id=int(request.COOKIES.get('chat_id')))
-        except (ObjectDoesNotExist, ValueError):
-            return self.redirect('messages_page')
-        if not user or user.is_anonymous or (chat not in filter_chat_by_params(users=user)):
-            return self.redirect('messages_page')
+            chat = get_chat_by_params(id=int(request.session.get('chat_id')))
+        except (ObjectDoesNotExist, ValueError, TypeError):
+            return redirect('messages_page')
+        if chat not in filter_chat_by_params(users=user):
+            return redirect('messages_page')
         args['user'] = user
         args['chat'] = chat
-        return super().handle(request, *params, **args)
+        return super().dispatch(request, *params, **args)
 
     def post(self, request: HttpRequest, *params, **args):
         file = request.FILES.get('file')
         file_title = request.POST.get('file_title')
+
+        if not file or not file_title:
+            return HttpResponseBadRequest()
 
         md = MessageData()
         md.file.save(file_title, file)
@@ -220,33 +226,40 @@ class FileHandler(PageBase):
         return HttpResponse('')
 
     def get(self, request: HttpRequest, *params, **args):
-        file = Message.objects.get(id=int(request.GET.get('file_id'))).data.file
-        return FileResponse(file.file)
+        try:
+            message = get_message_by_params(id=int(request.GET.get('file_id')))
+            if message is None:
+                raise ValueError
+            return FileResponse(message.data.file)
+        except (ValueError, TypeError):
+            return HttpResponseBadRequest(request)
 
 
-class ChatSettings(PageBase):
-    def handle(self, request: HttpRequest, *params, **args):
+class ChatSettings(View):
+    @method_decorator(login_required)
+    def dispatch(self, request: HttpRequest, *params, **args):
         user = get_user(request)
-        chat_id = request.COOKIES.get('chat_id')
+        chat_id = request.session.get('chat_id')
         try:
             chat = get_chat_by_params(id=int(chat_id))
         except (ObjectDoesNotExist, ValueError):
             chat = None
 
-        if user and not user.is_anonymous and chat:
+        if chat:
             if user in chat.users.all():
                 args['user'] = user
                 args['chat'] = chat
-                return super().handle(request, *params, **args)
+                return super().dispatch(request, *params, **args)
 
-        return self.redirect('messages_page')
+        return redirect('messages_page')
 
     def get(self, request: HttpRequest, *params, **args):
         action = request.GET.get('action')
         if action == 'delete':
             if args['chat'].admin == args['user']:
                 delete_chat(args['chat'])
-                return self.redirect('messages_page', {'chat_id': None})
+                request.session['chat_id'] = None
+                return redirect('messages_page')
 
         users = ChatsCreator.get_users_to_invite(request)
         users_to_invite = ''

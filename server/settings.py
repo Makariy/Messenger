@@ -119,3 +119,5 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 MEDIA_ROOT = 'main/users_images/'
+
+LOGIN_URL = '/login/'

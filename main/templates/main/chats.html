@@ -29,7 +29,11 @@
 								<h4 class="chat__title">{{ display.0.title }}</h4>
 								<p class="chat__last-message">
 									{% if display.1 %}
-									{{ display.1.author.username }}: {% if display.1.type == 'text' %}{{ display.1.data.text }} {% else %} Photo {% endif %}
+									{{ display.1.author.username }}: {% if display.1.type == 'text' %}{{ display.1.data.text }}
+									{% elif display.1.type == 'image' %}Photo
+									{% elif display.1.type == 'file' %}File
+									{% elif display.1.type == 'video' %}Video
+									{% endif %}
 									{% else %}
 									There are no messages right now. You can be first to write something!
 									{% endif %}
@@ -50,7 +54,7 @@
 	function connect () {
 		ws = new WebSocket('ws://' + window.location.hostname + ':8001');
 		ws.onmessage = function(response) {
-			var message = JSON.parse(response.data); 
+			var message = JSON.parse(response.data);
 			try {
 				if (message.command == 'update_message'){
 					var chat = document.getElementById(message.chat_id);
