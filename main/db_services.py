@@ -61,8 +61,7 @@ def create_user_by_params(*args, **kwargs):
     try:
         user = User(*args, **kwargs)
         UserValidator.validate_user(user)
-        user.save()
-        return user
+        return User.objects.create_user(*args, **kwargs)
     except ValidationError as e:
         raise e
 

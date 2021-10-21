@@ -31,7 +31,7 @@ class Authorization(View):
         return super().dispatch(request, *params, **args)
 
     def post(self, request: HttpRequest, *params, **args):
-        if not request.POST.get('username') and request.POST.get('password'):
+        if not request.POST.get('username') and not request.POST.get('password'):
             return redirect('login')
 
         data = {}
