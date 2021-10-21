@@ -199,11 +199,32 @@
 				}
 				if (message.command == 'pull_messages') {
 					var messages_list = $('.messages__list')[0];
+					var first_message = messages_list.children[0];
+
 					$('.messages__list').prepend($(message.data));
+
+					for(var i = 0; i < messages_list.children.length; i+=1) {
+						if (messages_list.children[i] == first_message) break;
+
+						var message = messages_list.children[i];
+
+						if (message.children[1].tagName == 'IMG'){
+							var image = message.children[1];
+							image.style['height'] = '50vh';
+							image.style['width'] = '50vw';
+							image.onload = function() {
+								image.style['height'] = 'auto';
+								image.style['width'] = 'auto';
+								scrollToLastMessage();
+							};
+						}
+						else if (message.children[1].tagName == 'P') {
+							checkLinkInMessage(message.children[1]);
+						}
+					}
 				}
 			}
 			ws.onopen = function(a) {
-				console.log(a);
 				$('.loading').removeClass('active');
 				ws.send('messenger');
 				data = $.get('/get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data)});

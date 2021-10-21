@@ -25,8 +25,13 @@ def get_last_messages(chat=None, chat_title=None, count=10, last_id=-1):
     return messages[::-1]
 
 
+def get_last_message(chat):
+    """Returns the last message <main.models.Message> from chat <main.models.Chat>"""
+    return Message.objects.filter(chat=chat).order_by('id').last()
+
+
 def get_last_chats_messages(chats):
     """Returns the last messages <main.models.Message> from chats <chats>"""
-    return [Message.objects.filter(chat=chat).order_by('pk').last() for chat in chats]
+    return [get_last_message(chat) for chat in chats]
 
 

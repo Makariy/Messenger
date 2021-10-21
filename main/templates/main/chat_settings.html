@@ -58,10 +58,7 @@
                 </div>
             </div>
         </div>
-    </section>
-</body>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
-    <script>
+        <script>
 
         var users_to_add = [{{ users_to_invite }}];
 
@@ -90,25 +87,19 @@
         }
 
         function sendForm() {
-            if (document.getElementById('id_name').value.length < 2) {
-                alert("Chat's title length must be greater than 2");
-                return;
-            }
-
             $.ajax({
                 type: "POST",
                 url: "",
                 data:  {'title': document.getElementById('id_name').value,
                         'users[]': users_to_add,
                         'csrfmiddlewaretoken': document.getElementById('csrf_token').children[0].value},
-                success: function(data) {
-                    if (data != ""){
-                        console.log(data);
-                        $('.errors')[0].style['display'] = 'block';
-                        $('.errors__error')[0].innerText = data;
+                success: function(response) {
+                    if (response.status == 'success') {
+                        document.location = document.location.protocol + "//" + document.location.host;
                     }
                     else {
-                        document.location = document.location.protocol + "//" + document.location.host;
+                        $('.errors')[0].style['display'] = 'block';
+                        $('.errors__error')[0].innerHTML = response.error;
                     }
                 }
             })
@@ -121,4 +112,7 @@
             }
         }
     </script>
+    </section>
+</body>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
 </html>

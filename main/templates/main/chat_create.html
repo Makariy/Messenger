@@ -82,22 +82,17 @@
         }
 
         function sendForm() {
-            if (document.getElementById('id_name').value.length < 2) {
-                alert("Chat's title length must be greater than 2"); 
-                return;
-            }
-
             $.ajax({
                 type: "POST",
                 url: "",
                 data:  {'title': document.getElementById('id_name').value,
                         'users[]': users_to_add,
                         'csrfmiddlewaretoken': document.getElementById('csrf_token').children[0].value},
-                success: function (response) { 
-                    if (response == '')
+                success: function (response) {
+                    if (response.status == 'success')
                         document.location = document.location.protocol + "//" + document.location.host;
                     else
-                        $('.form__error-text')[0].innerText = response;
+                        $('.form__error-text')[0].innerText = response.error;
                 },
             })
         }

@@ -1,5 +1,6 @@
 from django.shortcuts import render
-from django.http import HttpRequest, HttpResponse, FileResponse, HttpResponseBadRequest
+from django.http import HttpRequest, HttpResponse, \
+    FileResponse, HttpResponseBadRequest, JsonResponse
 from django.views.generic import View
 
 
@@ -15,6 +16,7 @@ from django.views.decorators.csrf import csrf_exempt
 from .routine import PageBase
 
 from .db_services import *
+from .runtime_services import *
 from .messages_service import *
 
 
@@ -134,7 +136,7 @@ class ChatsHandler(View):
             context = {'displays': display}
             return render(request, 'main/chats.html', context)
 
-        return HttpResponse('')
+        return HttpResponseBadRequest()
 
 
 @method_decorator(login_required, name='dispatch')
@@ -154,22 +156,19 @@ class ChatsCreator(View):
         author = get_user(request)
         title = request.POST.get('title', "").strip()
 
-        if title:
-            users = []
-            users_id = request.POST.getlist('users[]')
-            for user_id in users_id:
-                try:
-                    users.append(get_user_by_params(id=int(user_id)))
-                except ValueError:
-                    pass
+        users = []
+        users_id = request.POST.getlist('users[]')
+        for user_id in users_id:
             try:
-                create_chat_by_params(title=title, admin=author, users=users)
-            except ValidationError as e:
-                return HttpResponse(e.message)
+                users.append(get_user_by_params(id=int(user_id)))
+            except ValueError:
+                pass
+        try:
+            create_chat_by_params(title=title, admin=author, users=users)
+        except ValidationError as e:
+            return JsonResponse({'status': 'fail', 'error': e.message})
 
-            return HttpResponse()
-
-        return HttpResponse()
+        return JsonResponse({'status': 'success'})
 
 
 @method_decorator(login_required, name='dispatch')
@@ -197,6 +196,7 @@ class FileHandler(View):
             return redirect('messages_page')
         if chat not in filter_chat_by_params(users=user):
             return redirect('messages_page')
+
         args['user'] = user
         args['chat'] = chat
         return super().dispatch(request, *params, **args)
@@ -206,7 +206,7 @@ class FileHandler(View):
         file_title = request.POST.get('file_title')
 
         if not file or not file_title:
-            return HttpResponseBadRequest()
+            return JsonResponse({'status': 'fail'})
 
         md = MessageData()
         md.file.save(file_title, file)
@@ -223,7 +223,7 @@ class FileHandler(View):
 
         message.save()
         run_async(websocket_server.get_messenger().notify_file(args['user'], args['chat'], message.id))
-        return HttpResponse('')
+        return JsonResponse({'status': 'success'})
 
     def get(self, request: HttpRequest, *params, **args):
         try:
@@ -272,7 +272,7 @@ class ChatSettings(View):
     def post(self, request: HttpRequest, *params, **args):
         title = request.POST.get('title', "").strip()
         if not title:
-            return HttpResponse('')
+            return HttpResponseBadRequest()
 
         # Get users to add
         users = []
@@ -281,12 +281,12 @@ class ChatSettings(View):
                 user = get_user_by_params(id=int(user_id))
                 if user:
                     users.append(user)
-            except ValueError:
+            except (ValueError, TypeError):
                 pass
 
         try:
             update_chat(args['chat'], title, users)
         except ValidationError as e:
-            return HttpResponse(e.message)
+            return JsonResponse({'status': 'fail', 'error': e.message})
 
-        return HttpResponse('')
+        return JsonResponse({'status': 'success'})

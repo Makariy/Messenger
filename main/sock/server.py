@@ -14,7 +14,8 @@ from django.contrib.auth.models import User
 from django.contrib.sessions.models import Session
 
 from ..models import Chat, Message, MessageData
-from ..messages_service import get_last_messages
+from ..messages_service import get_last_messages, get_last_message
+from ..db_services import *
 
 
 async def run_sync(func):
@@ -41,13 +42,13 @@ class Connection:
 
 
 async def get_user(session_id: str) -> User:
-	session = await run_sync(lambda: Session.objects.get(session_key=session_id))
-	user = await run_sync(lambda: User.objects.get(id=session.get_decoded().get('_auth_user_id')))
+	session = await run_sync(lambda: get_session_by_params(session_key=session_id))
+	user = await run_sync(lambda: get_user_by_params(id=session.get_decoded().get('_auth_user_id')))
 	return user
 
 
 async def get_session_data(session_id: str) -> dict:
-	session = await run_sync(lambda: Session.objects.get(session_key=session_id))
+	session = await run_sync(lambda: get_session_by_params(session_key=session_id))
 	return session.get_decoded()
 
 
@@ -78,14 +79,14 @@ class MessageServer():
 			raise self.RegistrationError('User with this name doesn\'t exist')
 		session_data = await get_session_data(cookies.get('sessionid'))
 		try:
-			chat = await run_sync(lambda: Chat.objects.get(id=session_data['chat_id']))
+			chat = await run_sync(lambda: get_chat_by_params(id=session_data['chat_id']))
 		except ObjectDoesNotExist:
 			raise self.RegistrationError('Chat with this name doesn\'t exist')
 
 		return user, chat
 
 	async def is_user_in_chat(self, user, chat):
-		return chat in await run_sync(lambda: tuple(Chat.objects.filter(users__id=user.id)))
+		return chat in await run_sync(lambda: tuple(filter_chat_by_params(users__id=user.id)))
 
 	async def _register(self, websocket):
 		try:
@@ -167,7 +168,7 @@ class MessageServer():
 
 	async def delete(self, connection, chat, request):
 		try:
-			message = await run_sync(lambda: Message.objects.get(id=int(request['data'])))
+			message = await run_sync(lambda: get_message_by_params(id=int(request['data'])))
 			if await run_sync(lambda: connection.user == message.author):
 				await run_sync(message.delete)
 				for _connection in self.chats[chat.id]:
@@ -182,7 +183,7 @@ class MessageServer():
 		try:
 			for conn in self.chats[chat.id]:
 				template = loader.get_template('main/messages.html')
-				message = await run_sync(lambda: Message.objects.get(id=str(file_id)))
+				message = await run_sync(lambda: get_message_by_params(id=str(file_id)))
 				html_file = await run_sync(lambda: template.render({'messages': [message], 'user': conn.user}))
 				await conn.socket.send(json.dumps({
 					'command': 'notify_file',
@@ -227,7 +228,7 @@ class MessageServer():
 	async def get_chat_by_connection(self, connection):
 		for chat_id in self.chats:
 			if connection in self.chats[chat_id]:
-				return await run_sync(lambda: Chat.objects.get(id=chat_id))
+				return await run_sync(lambda: get_chat_by_params(id=chat_id))
 		return None
 
 	def is_user_connected(self, user, chat=None, chat_id=None):
@@ -298,7 +299,7 @@ class ChatServer:
 		user = await get_user(cookies.get('sessionid'))
 		connection = Connection(user=user, socket=websocket)
 
-		chats = await run_sync(lambda: tuple(Chat.objects.filter(users=user)))
+		chats = await run_sync(lambda: tuple(filter_chat_by_params(users=user)))
 		for chat in chats:
 			if not self.chats.get(chat.id):
 				self.chats[chat.id] = [connection]
@@ -326,7 +327,7 @@ class ChatServer:
 			last_check = time.time()
 
 			for chat_id in self.chats:
-				db_message = await run_sync(lambda: Message.objects.filter(chat__id=chat_id).order_by('pk').last())
+				db_message = await run_sync(lambda: get_last_message(get_chat_by_params(id=chat_id)))
 				await self.notify(chat_id, db_message)
 
 			self.lock.release()
@@ -377,16 +378,17 @@ class ChatServer:
 			if self.is_user_connected(user):
 				await self.remove_user_from_chat(user, chat_id)
 
-	async def add_user_to_chat(self, user, chat):
+	async def add_user_to_chat(self, user, chat_id):
 		try:
 			self.lock.acquire()
 			for connection in self.connections:
 				if connection.user.id == user.id:
-					last_message = await run_sync(lambda: Message.objects.filter(chat__id=chat.id).order_by('id').last())
+					chat = await run_sync(lambda: get_chat_by_params(id=chat_id))
+					last_message = await run_sync(lambda: get_last_message(chat))
 					template = loader.get_template('main/chat.html')
 					data = await run_sync(lambda: str(template.render({
 						'chat': chat,
-						'data': last_message,
+						'last_message': last_message,
 					})))
 					await connection.socket.send(json.dumps({
 						'command': 'add_chat',
