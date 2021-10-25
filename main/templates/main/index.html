@@ -162,8 +162,16 @@
 			message.innerHTML = message.innerHTML.replaceAll(/(http?s:\/\/[^ ,:;'"\{\}\[\]\(\)<>]+)/g, '<a href="$1" style="color: blue">$1</a>');
 		}
 
-		function connect() {
+		function start_loading_animation() {
 			$('.loading').addClass('active');
+		}
+
+		function stop_loading_animation() {
+			$('.loading').removeClass('active');
+		}
+
+		function connect() {
+			start_loading_animation();
 			ws = new WebSocket('ws://' + window.location.hostname + ':8001');
 			ws.onmessage = function(response) {
 				message = JSON.parse(response.data);
@@ -225,7 +233,7 @@
 				}
 			}
 			ws.onopen = function(a) {
-				$('.loading').removeClass('active');
+				stop_loading_animation();
 				ws.send('messenger');
 				data = $.get('/get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data)});
 			}
@@ -295,6 +303,7 @@
 		}
 
 		function sendFile(file) {
+			start_loading_animation();
 			var image_ext = ['.jpg', 'jpeg', '.png', '.tiff', '.heic'];
 			for (var ext in image_ext){
 				if (file.name.endsWith(image_ext[ext])){
@@ -306,14 +315,13 @@
 			var fd = new FormData();
 			fd.append('file', file);
 			fd.append('file_title', file.name)
-
 			$.ajax({
 				url: '/file_upload/',
 				type: 'post',
 				data: fd,
 				contentType: false,
 				processData: false,
-			});
+			}).done(() => (stop_loading_animation()));
 			removeChosenFile();
 		}
 
@@ -321,14 +329,14 @@
 			var fd = new FormData();
 			fd.append('file', event.resizedImage);
 			fd.append('file_title', event.imageTitle)
-
+			start_loading_animation();
 			$.ajax({
 				url: '/file_upload/',
 				type: 'post',
 				data: fd,
 				contentType: false,
 				processData: false,
-			});
+			}).done(() => stop_loading_animation());
 			removeChosenFile();
 		});
 

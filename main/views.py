@@ -1,7 +1,8 @@
 from django.shortcuts import render
 from django.http import HttpRequest, HttpResponse, \
-    FileResponse, HttpResponseBadRequest, JsonResponse
+    FileResponse, HttpResponseBadRequest, JsonResponse, StreamingHttpResponse
 from django.views.generic import View
+from django.core.cache import caches, InvalidCacheBackendError
 
 
 from django.contrib.auth import get_user, authenticate, login, logout
@@ -18,6 +19,13 @@ from .routine import PageBase
 from .db_services import *
 from .runtime_services import *
 from .messages_service import *
+from .streaming_services import open_streaming_file
+
+import logging
+from threading import Lock
+
+
+logging.basicConfig(filename='log.log', filemode='w', format='%(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
 
 
 websocket_server = WebSocketHandler()
@@ -43,6 +51,7 @@ class Authorization(View):
             return self.get(request, 'Invalid credentials')
 
         login(request, user)
+        logging.info("User logged: %s" % user.username)
         return redirect('messages_page')
 
     def get(self, request: HttpRequest, *params, **args):
@@ -68,6 +77,7 @@ class Registration(View):
             return self.get(request, e.message)
 
         login(request, user)
+        logging.info("User registered: %s" % user.username)
         return redirect('messages_page')
 
     def get(self, request, *params, **args):
@@ -114,6 +124,7 @@ class ChatsHandler(View):
             return redirect('messages_page')
 
         if action == 'exit':
+            logging.info("User %s logged out" % get_user(request).username)
             logout(request)
             request.session['chat_id'] = None
             return redirect('messages_page')
@@ -164,10 +175,11 @@ class ChatsCreator(View):
             except ValueError:
                 pass
         try:
-            create_chat_by_params(title=title, admin=author, users=users)
+            chat = create_chat_by_params(title=title, admin=author, users=users)
         except ValidationError as e:
             return JsonResponse({'status': 'fail', 'error': e.message})
 
+        logging.info("User %s created chat %s" % (author.username, chat.title))
         return JsonResponse({'status': 'success'})
 
 
@@ -223,6 +235,7 @@ class FileHandler(View):
 
         message.save()
         run_async(websocket_server.get_messenger().notify_file(args['user'], args['chat'], message.id))
+        logging.info("File uploaded: %s" % file_title)
         return JsonResponse({'status': 'success'})
 
     def get(self, request: HttpRequest, *params, **args):
@@ -230,8 +243,21 @@ class FileHandler(View):
             message = get_message_by_params(id=int(request.GET.get('file_id')))
             if message is None:
                 raise ValueError
+
+            if message.type == 'video':
+                file, status_code, content_length, content_range = open_streaming_file(request, message=message)
+                if file:
+                    response = StreamingHttpResponse(file, status=status_code, content_type='video/mp4')
+                    response['Accept-Ranges'] = 'bytes'
+                    response['Content-Length'] = str(content_length)
+                    response['Cache-Control'] = 'no-cache'
+                    response['Content-Range'] = content_range
+                    return response
+                else:
+                    return HttpResponseBadRequest()
+
             return FileResponse(message.data.file)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
             return HttpResponseBadRequest(request)
 
 
@@ -289,4 +315,5 @@ class ChatSettings(View):
         except ValidationError as e:
             return JsonResponse({'status': 'fail', 'error': e.message})
 
+        logging.info("Modified chat %s" % args['chat'].title)
         return JsonResponse({'status': 'success'})

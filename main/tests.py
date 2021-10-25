@@ -18,13 +18,13 @@ from .db_services import get_user_by_params
 from .db_services import get_chat_by_params
 from .db_services import get_message_by_params
 from .db_services import create_user_by_params
-from .db_services import create_chat_by_params
+from .runtime_services import create_chat_by_params
 from .db_services import create_message_data_by_params
 from .db_services import create_message_by_params
 from .db_services import filter_user_by_params
 from .db_services import filter_message_by_params
-from .db_services import delete_chat
-from .db_services import update_chat
+from .runtime_services import delete_chat
+from .runtime_services import update_chat
 
 
 import sys
@@ -170,5 +170,24 @@ class DBServicesTest(TestCase):
         self.assertEquals(chat.title, new_chat_title)
         self.assertEquals(chat.admin, self.user)
 
+
+class ViewTest(TestCase):
+    def setUp(self):
+        self.user_password = 'TestPassword'
+        self.user = User.objects.create_user(username='TestUser', password=self.user_password, email='testmail@gmail.com')
+
+        self.chat = Chat(title='TestChat', admin=self.user)
+        self.chat.save()
+        self.chat.users.add(self.user)
+
+        self.md = MessageData.objects.create(text="Test message")
+        self.message = Message.objects.create(author=self.user, chat=self.chat, data=self.md, type='text')
+
+    def test_user_can_login(self):
+        response = self.client.post('http://127.0.0.1:8000/login/', data={
+            'username': self.user.username,
+            'password': self.user_password}, follow=True)
+        self.assertEquals(response.status_code, 200)
+        self.assertEquals(response.resolver_match.view_name, 'chats_handler')
 
 

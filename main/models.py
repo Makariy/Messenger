@@ -1,9 +1,11 @@
-import os
+from django.core.cache import caches, InvalidCacheBackendError
 
 from django.db import models
 from django.contrib.auth.models import User
 
 from django.core.validators import ValidationError
+
+from threading import Lock
 
 # Create your models here.
 
@@ -23,7 +25,6 @@ class Message(models.Model):
         ordering = ['-date']
 
     def delete(self, *args, **kwargs):
-        self.data.delete()
         super().delete(*args, **kwargs)
 
     def __str__(self):
