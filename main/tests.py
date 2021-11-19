@@ -18,13 +18,13 @@ from .db_services import get_user_by_params
 from .db_services import get_chat_by_params
 from .db_services import get_message_by_params
 from .db_services import create_user_by_params
-from .runtime_services import create_chat_by_params
 from .db_services import create_message_data_by_params
 from .db_services import create_message_by_params
+from .db_services import create_chat_by_params
 from .db_services import filter_user_by_params
 from .db_services import filter_message_by_params
-from .runtime_services import delete_chat
-from .runtime_services import update_chat
+from .db_services import update_chat
+from .db_services import delete_chat
 
 
 import sys

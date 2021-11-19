@@ -1,0 +1,25 @@
+<div class="message" id="{{ message_id }}">
+  {% if type == 'text' %}
+    <h4 class="message__author">{{ author }}</h4>
+    <p class="message__inner">{{ message }}</p>
+  {% endif %}
+  {% if type == 'image' %}
+    <h4 class="message__author">{{ author }}</h4>
+    <img src="/file_upload?file_id={{ message_id }}" class="message__inner message__image">
+  {% endif %}
+  {% if type == 'video' %}
+    <h4 class="message__author">{{ author }}</h4>
+    <video class="message__inner message__image" controls>
+      <source src="/file_upload?file_id={{ message_id }}">
+    </video>
+  {% endif %}
+  {% if type == 'file' %}
+    <h4 class="message__author">{{ author }}</h4>
+    <a href="/file_upload?file_id={{ message_id }}" class="message__inner message__image" style="color: blue">{{ message }}</a>
+  {% endif %}
+  <div class="message__actions">
+    {% if user_id == author_id %}
+      <button class="message__actions-delete" onclick="deleteMessage({{ message_id }})">Delete</button>
+    {% endif %}
+  </div>
+</div>

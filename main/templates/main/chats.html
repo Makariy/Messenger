@@ -29,13 +29,12 @@
 								<h4 class="chat__title">{{ display.0.title }}</h4>
 								<p class="chat__last-message">
 									{% if display.1 %}
-									{{ display.1.author.username }}: {% if display.1.type == 'text' %}{{ display.1.data.text }}
-									{% elif display.1.type == 'image' %}Photo
-									{% elif display.1.type == 'file' %}File
-									{% elif display.1.type == 'video' %}Video
+									{{ display.1.author.username }}:
+									{% if display.1.type == 'text' %}{{ display.1.data.text }}
+										{% elif display.1.type == 'image' %}Photo
+										{% elif display.1.type == 'file' %}File
+										{% elif display.1.type == 'video' %}Video
 									{% endif %}
-									{% else %}
-									There are no messages right now. You can be first to write something!
 									{% endif %}
 								</p>
 							</a>
@@ -47,38 +46,76 @@
 	</section>
 </body>
 	<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
+</html>
 <script>
 
 	var ws = null;
+	var no_messages = 'There are no messages right now. You can be first to write something!'
+
 
 	function connect () {
-		ws = new WebSocket('ws://' + window.location.hostname + ':8001');
+		ws = new WebSocket('ws://' + window.location.hostname + ':8000/chats/');
 		ws.onmessage = function(response) {
 			var message = JSON.parse(response.data);
 			try {
-				if (message.command == 'update_message'){
+				if (message.command == 'message'){
 					var chat = document.getElementById(message.chat_id);
-					chat.getElementsByClassName('chat__last-message')[0].innerText = message.data;
+					chat.getElementsByClassName('chat__last-message')[0].innerText = message.author + ': ' + message.message;
 				}
-				if (message.command == 'add_chat') {
-					document.getElementsByClassName('chats')[0].innerHTML += message.data;
+				if (message.command == 'delete_message') {
+					var chat = document.getElementById(message.chat_id);
+					if (!message.message)
+						chat.getElementsByClassName('chat__last-message')[0].innerText = no_messages;
+					else
+						chat.getElementsByClassName('chat__last-message')[0].innerText = message.author + ': ' + message.message;
+				}
+				if (message.command == 'update_chat') {
+					var chat = $(`#${message.chat_id}`)[0];
+
+					last_message = null;
+					if (message.last_message)
+						last_message = message.last_message.author + ': ' + message.last_message.message;
+					else
+						last_message = no_messages;
+					chat.getElementsByClassName('chat__last-message')[0].innerText = last_message;
+					chat.getElementsByClassName('chat__title')[0].innerText = message.chat_title;
+				}
+				if (message.command == 'create_chat') {
+					var insert = `
+								<div class="chat" id="${message.chat_id}">
+									<a href="/chats?action=get_chat&chat_id=${message.chat_id}">
+										<h4 class="chat__title">${message.chat_title}</h4>
+										<p class="chat__last-message">
+											${no_messages}
+										</p>
+									</a>
+								</div>
+							`;
+					document.getElementsByClassName('chats')[0].innerHTML += insert;
+					if (message.last_message){
+						$(`#${message.chat_id}`)[0].getElementsByClassName('chat__last-message')[0].innerText
+								= message.last_message.author + ': ' + message.last_message.message;
+					}
 				}
 				if (message.command == 'remove_chat') {
 					document.getElementById(message.chat_id).remove();
 				}
-				if (message.command == 'rename_chat') {
-					$('#' + message.id)[0].getElementsByClassName('chat__title')[0].innerText = message.name;
+				if (message.command == 'update_chat') {
+					$('#' + message.chat_id)[0].getElementsByClassName('chat__title')[0].innerText = message.chat_title;
 				}
 			}
 			catch {}
 		}
-		ws.onopen = function() {
-			ws.send('chat');
-			data = $.get('/get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data); });
-		}
+		ws.onopen = function() {}
 	}
 
 	connect();
+	window.onload = function() {
+		var chats = document.getElementsByClassName('chats')[0];
+		for (var i = 0; i < chats.children.length; i+=1) {
+			if (chats.children[i].getElementsByClassName('chat__last-message')[0].innerText == '')
+				chats.children[i].getElementsByClassName('chat__last-message')[0].innerText = no_messages;
+		}
+	}
 
 </script>
-</html>

@@ -159,7 +159,7 @@
 		}
 
 		function checkLinkInMessage(message) {
-			message.innerHTML = message.innerHTML.replaceAll(/(http?s:\/\/[^ ,:;'"\{\}\[\]\(\)<>]+)/g, '<a href="$1" style="color: blue">$1</a>');
+			message.innerHTML = message.innerHTML.replaceAll(/(http?s:\/\/[^ ,'"\{\}\[\]\(\)<>]+)/g, '<a href="$1" style="color: blue">$1</a>');
 		}
 
 		function start_loading_animation() {
@@ -172,7 +172,7 @@
 
 		function connect() {
 			start_loading_animation();
-			ws = new WebSocket('ws://' + window.location.hostname + ':8001');
+			ws = new WebSocket('ws://' + window.location.hostname + ':8000/messages/');
 			ws.onmessage = function(response) {
 				message = JSON.parse(response.data);
 				if (message.command == 'get_mes') {
@@ -205,7 +205,7 @@
 				if (message.command == 'disconnect') {
 					document.location.href = document.location.protocol  + '//' + document.location.host 
 				}
-				if (message.command == 'pull_messages') {
+				if (message.command == 'pull_mes') {
 					var messages_list = $('.messages__list')[0];
 					var first_message = messages_list.children[0];
 
@@ -234,8 +234,6 @@
 			}
 			ws.onopen = function(a) {
 				stop_loading_animation();
-				ws.send('messenger');
-				data = $.get('/get_session_id', function(data) { ws.send(document.cookie + '; sessionid=' + data)});
 			}
 			ws.onclose = connect;
 		}
@@ -380,7 +378,7 @@
 			last_id = messages.children[0].id;
 			
 			ws.send(JSON.stringify({
-				'command': 'pull_messages',
+				'command': 'pull_mes',
 				'last_id': last_id,
 			}));
 		}

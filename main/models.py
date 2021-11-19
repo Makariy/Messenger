@@ -1,11 +1,8 @@
-from django.core.cache import caches, InvalidCacheBackendError
-
 from django.db import models
 from django.contrib.auth.models import User
 
 from django.core.validators import ValidationError
 
-from threading import Lock
 
 # Create your models here.
 

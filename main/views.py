@@ -4,7 +4,6 @@ from django.http import HttpRequest, HttpResponse, \
 from django.views.generic import View
 from django.core.cache import caches, InvalidCacheBackendError
 
-
 from django.contrib.auth import get_user, authenticate, login, logout
 from django.urls import reverse_lazy
 from django.shortcuts import redirect
@@ -14,21 +13,17 @@ from django.utils.decorators import method_decorator
 
 from django.views.decorators.csrf import csrf_exempt
 
-from .routine import PageBase
-
 from .db_services import *
-from .runtime_services import *
-from .messages_service import *
 from .streaming_services import open_streaming_file
 
 import logging
 from threading import Lock
 
+# Install signal listeners
+from .signals import *
+
 
 logging.basicConfig(filename='log.log', filemode='w', format='%(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
-
-
-websocket_server = WebSocketHandler()
 
 
 class Authorization(View):
@@ -234,7 +229,7 @@ class FileHandler(View):
             message = Message(author=args['user'], chat=args['chat'], data=md, type='file')
 
         message.save()
-        run_async(websocket_server.get_messenger().notify_file(args['user'], args['chat'], message.id))
+
         logging.info("File uploaded: %s" % file_title)
         return JsonResponse({'status': 'success'})
 
