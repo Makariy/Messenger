@@ -59,15 +59,15 @@
 			var message = JSON.parse(response.data);
 			try {
 				if (message.command == 'message'){
-					var chat = document.getElementById(message.chat_id);
-					chat.getElementsByClassName('chat__last-message')[0].innerText = message.author + ': ' + message.message;
+					var chat = document.getElementById(message.message.chat_id);
+					chat.getElementsByClassName('chat__last-message')[0].innerText = message.message.author + ': ' + message.message.message;
 				}
 				if (message.command == 'delete_message') {
-					var chat = document.getElementById(message.chat_id);
-					if (!message.message)
+					var chat = document.getElementById(message.message.chat_id);
+					if (!message.message.message)
 						chat.getElementsByClassName('chat__last-message')[0].innerText = no_messages;
 					else
-						chat.getElementsByClassName('chat__last-message')[0].innerText = message.author + ': ' + message.message;
+						chat.getElementsByClassName('chat__last-message')[0].innerText = message.message.author + ': ' + message.message.message;
 				}
 				if (message.command == 'update_chat') {
 					var chat = $(`#${message.chat_id}`)[0];

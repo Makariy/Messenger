@@ -20,9 +20,11 @@ def render_message(message):
         data = 'File'
     return {
         'author': message.author.username,
+        'author_id': message.author.id,
         'message': data,
+        'type': message.type,
+        'message_id': message.id,
         'chat_id': message.chat.id,
-        'id': message.id
     }
 
 
@@ -32,17 +34,11 @@ def on_message_created(sender, instance: Message, **kwargs):
     message_channel_name = messenger_get_group_name_for_chat(instance.chat.id)
     async_to_sync(channel.group_send)(chat_channel_name, {
         'type': 'handle_message_created',
-        'message': instance
+        'message': render_message(instance)
     })
     async_to_sync(channel.group_send)(message_channel_name, {
         'type': 'handle_send_message',
-        'message': {
-            'message': instance.data.text,
-            'message_id': instance.id,
-            'author': instance.author.username,
-            'author_id': instance.author.id,
-            'type': instance.type,
-        },
+        'message': render_message(instance)
     })
 
 
@@ -51,9 +47,7 @@ def on_message_delete(sender, instance: Message, **kwargs):
     message_channel_name = messenger_get_group_name_for_chat(instance.chat.id)
     async_to_sync(channel.group_send)(message_channel_name, {
         'type': 'handle_del_message',
-        'message': {
-            'message_id': instance.id
-        }
+        'message': render_message(instance)
     })
 
     chat_channel_name = chat_get_group_name_for_chat(instance.chat.id)

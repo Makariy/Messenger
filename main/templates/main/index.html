@@ -184,7 +184,7 @@
 					scrollToLastMessage();
 				}
 				if (message.command == 'del') {
-					$('#' + message.data)[0].remove();
+					$('#' + message.message.message_id)[0].remove();
 					if (message.data == last_id) 
 						last_id = $('.messages__list')[0].children[0];
 				}

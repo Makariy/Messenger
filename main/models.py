@@ -21,8 +21,9 @@ class Message(models.Model):
         verbose_name_plural = "Messages"
         ordering = ['-date']
 
-    def delete(self, *args, **kwargs):
-        super().delete(*args, **kwargs)
+    def delete(self, using=None, keep_parents=False):
+        self.data.delete()
+        super().delete()
 
     def __str__(self):
         s = str(self.author) + '\n'
@@ -50,13 +51,6 @@ class Chat(models.Model):
 
     def __str__(self):
         return str(self.title)
-
-    def delete(self, using=None, keep_parents=False):
-        messages = Message.objects.filter(chat=self)
-        for message in messages:
-            message.delete()
-
-        return super().delete(using, keep_parents)
 
 
 def validate_user_empty(user: User):

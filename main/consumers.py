@@ -28,13 +28,13 @@ class MessengerConsumer(WebsocketConsumer):
             chat_id = self.scope['session'].get('chat_id')
             self.chat = Chat.objects.get(id=int(chat_id))
 
-            users = list(self.chat.users.all())
+            users = self.chat.users.all()
 
             if self.user in users:
                 self.user_group_name = messenger_get_group_name_for_user(self.user.id)
-                self.group_name = messenger_get_group_name_for_chat(self.chat.id)
+                self.chat_group_name = messenger_get_group_name_for_chat(self.chat.id)
                 async_to_sync(self.channel_layer.group_add)(self.user_group_name, self.channel_name)
-                async_to_sync(self.channel_layer.group_add)(self.group_name, self.channel_name)
+                async_to_sync(self.channel_layer.group_add)(self.chat_group_name, self.channel_name)
                 self.accept()
                 return
 
@@ -43,12 +43,14 @@ class MessengerConsumer(WebsocketConsumer):
         # NOT accepting if hadn't passed the validation
 
     def disconnect(self, code):
-        async_to_sync(self.channel_layer.group_discard)(self.group_name, self.channel_name)
+        async_to_sync(self.channel_layer.group_discard)(self.user_group_name, self.channel_name)
+        async_to_sync(self.channel_layer.group_discard)(self.chat_group_name, self.channel_name)
 
     def handle_send_message(self, event):
+        message = event['message']
+        message['user_id'] = self.user.id
         template = loader.get_template('main/message.html')
-        event['message']['user_id'] = self.user.id
-        result = str(template.render(event['message']))
+        result = str(template.render(message))
         self.send(json.dumps({
             'command': 'get_mes',
             'data': result
@@ -57,7 +59,7 @@ class MessengerConsumer(WebsocketConsumer):
     def handle_del_message(self, event):
         self.send(json.dumps({
             'command': 'del',
-            'data': event['message']['message_id'],
+            'message': event['message']
         }))
 
     def handle_chat_updated(self, event):
@@ -133,42 +135,25 @@ class ChatConsumer(WebsocketConsumer):
     def handle_message_created(self, event):
         try:
             message = event['message']
-            md = message.data
-            if message.type == 'text':
-                data = md.text
-            elif message.type == 'image':
-                data = 'Image'
-            elif message.type == 'video':
-                data = 'Video'
-            else:
-                data = 'File'
 
             self.send(json.dumps({
                 'command': 'message',
-                'message': data,
-                'author': message.author.username,
-                'chat_id': message.chat.id,
+                'message': message,
             }))
         except Exception as e:
             print('Exception during notifying chats: ', str(e))
 
     def handle_message_deleted(self, event):
         message = event['message']
-        if message.get('id') is not None:
+        if message.get('message') is not None:
             self.send(json.dumps({
                 'command': 'delete_message',
-                'author': message['author'],
-                'message': message['message'],
-                'chat_id': message['chat_id'],
-                'id': message['id']
+                'message': message,
             }))
         else:
             self.send(json.dumps({
                 'command': 'delete_message',
-                'author': None,
-                'message': None,
-                'chat_id': message['chat_id'],
-                'id': None
+                'message': message
             }))
 
     def handle_chat_updated(self, event):
