@@ -172,7 +172,7 @@
 
 		function connect() {
 			start_loading_animation();
-			ws = new WebSocket('ws://' + window.location.hostname + ':8000/messages/');
+			ws = new WebSocket('ws://' + window.location.host + '/messages/');
 			ws.onmessage = function(response) {
 				message = JSON.parse(response.data);
 				if (message.command == 'get_mes') {

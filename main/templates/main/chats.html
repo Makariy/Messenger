@@ -54,7 +54,7 @@
 
 
 	function connect () {
-		ws = new WebSocket('ws://' + window.location.hostname + ':8000/chats/');
+		ws = new WebSocket('ws://' + window.location.host + '/chats/');
 		ws.onmessage = function(response) {
 			var message = JSON.parse(response.data);
 			try {

@@ -17,7 +17,6 @@ from .db_services import *
 from .streaming_services import open_streaming_file
 
 import logging
-from threading import Lock
 
 # Install signal listeners
 from .signals import *
@@ -78,11 +77,6 @@ class Registration(View):
     def get(self, request, *params, **args):
         context = {'error': params[0] if not params == () else ''}
         return render(request, 'main/signup.html', context)
-
-
-@login_required
-def request_session_id(request):
-    return HttpResponse(request.COOKIES.get('sessionid'))
 
 
 class MessagesPage(View):
@@ -163,8 +157,8 @@ class ChatsCreator(View):
         title = request.POST.get('title', "").strip()
 
         users = []
-        users_id = request.POST.getlist('users[]')
-        for user_id in users_id:
+        users_ids = request.POST.getlist('users[]')
+        for user_id in users_ids:
             try:
                 users.append(get_user_by_params(id=int(user_id)))
             except ValueError:
