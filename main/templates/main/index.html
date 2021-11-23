@@ -159,7 +159,7 @@
 		}
 
 		function checkLinkInMessage(message) {
-			message.innerHTML = message.innerHTML.replaceAll(/(http?s:\/\/[^ ,'"\{\}\[\]\(\)<>]+)/g, '<a href="$1" style="color: blue">$1</a>');
+			message.innerHTML = message.innerHTML.replaceAll(/(https?:\/\/[^ ,'"\{\}\[\]\(\)<>\n]+)/g, '<a href="$1" style="color: blue">$1</a>');
 		}
 
 		function start_loading_animation() {
