@@ -176,12 +176,14 @@
 			ws.onmessage = function(response) {
 				message = JSON.parse(response.data);
 				if (message.command == 'get_mes') {
+					var last_message = getLastMessage();
 					var elem = new DOMParser().parseFromString(message.data, 'text/html');
 					$('.messages__list')[0].appendChild(elem.body.children[0]);
-					var last_message = getLastMessage();
-					var message = last_message.children[1];
-					checkLinkInMessage(message)
-					scrollToLastMessage();
+					var insert_message = getLastMessage();
+					var message = insert_message.children[1];
+					checkLinkInMessage(insert_message);
+					if (isElementVisible(last_message))
+						scrollToLastMessage();
 				}
 				if (message.command == 'del') {
 					$('#' + message.message.message_id)[0].remove();

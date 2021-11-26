@@ -10,6 +10,7 @@ from django.shortcuts import redirect
 
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_control
 
 from django.views.decorators.csrf import csrf_exempt
 
@@ -245,7 +246,10 @@ class FileHandler(View):
                 else:
                     return HttpResponseBadRequest()
 
-            return FileResponse(message.data.file)
+            response = FileResponse(message.data.file)
+            response['Cache-Control'] = 'public, max-age=315360000'
+            return response
+
         except (ValueError, TypeError) as e:
             return HttpResponseBadRequest(request)
 
